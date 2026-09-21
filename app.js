@@ -13,7 +13,7 @@ $('#clearAll').onclick=()=>{if(confirm(ui==='sv'?'Rensa alla lokalt sparade LOGG
 $('#startBtn').onclick=()=>{let name=$('#meetingName').value.trim();if(!name||!$('#consent').checked){toast(t('nameRequired'));return}current={id:Date.now().toString(),name,start:Date.now(),end:null,output:$('#outputLang').value,transcript:'',sections:null};finalText='';$('#transcript').value='';$('#liveTitle').textContent=name;$('#liveDate').textContent=fmt(current.start);goTo('live');startTimer();startSpeech()};
 function startTimer(){clearInterval(tick);let f=()=>$('#timer').textContent=duration(Date.now()-current.start);f();tick=setInterval(f,1000)}
 function speechDetail(msg=''){const el=$('#speechDetail');if(el)el.textContent=msg}
-let recorder=null, stream=null, chunks=[], uploadBusy=false, chunkTimer=null, audioCtx=null, analyser=null, meterRAF=null, stopping=false, chunkBytes=0, chunkCount=0;
+let recorder=null, stream=null, chunks=[], uploadBusy=false, chunkTimer=null, audioCtx=null, analyser=null, meterRAF=null, stopping=false, chunkBytes=0, chunkCount=0, finishFlush=false, finishWaiter=null;
 const DEBUG=new URLSearchParams(location.search).get('debug')==='1'; if(DEBUG) document.documentElement.classList.add('debug-mode');
 function diag(msg){const el=$('#diagnostics');if(DEBUG&&el){const stamp=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});el.textContent=stamp+' · '+msg+'\n'+el.textContent.split('\n').slice(0,5).join('\n')}}
 const MARINE_HINTS=['superyacht','sailing yacht','Baltic Yachts','fairing','prepreg','infusion','lamination','bulkhead','deckhouse','passerelle','tender garage','beach club','sea trial','commissioning','classification','class','flag state','HVAC','AV IT','joinery','outfitting','rigging','carbon mast','boom','standing rigging','running rigging','hydraulics','composites','teak deck'];
@@ -72,10 +72,17 @@ function beginRecorder(type){
       clearTimeout(chunkTimer);
       const blob=new Blob(chunks,{type}); chunks=[];
       diag('STOP ✓ · '+Math.round(blob.size/1024)+' KB');
-      if(!stopping&&!paused&&current&&!current.end){
-        if(blob.size<800){diag('AUDIO TOO SMALL · restarting'); setTimeout(()=>beginRecorder(type),250); return;}
-        await sendChunk(blob,(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,''),type);
-        if(!stopping&&!paused&&current&&!current.end)setTimeout(()=>beginRecorder(type),150);
+      try{
+        if(finishFlush){
+          finishFlush=false;
+          if(blob.size>=800) await sendChunk(blob,(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,''),type);
+        }else if(!stopping&&!paused&&current&&!current.end){
+          if(blob.size<800){diag('AUDIO TOO SMALL · restarting'); setTimeout(()=>beginRecorder(type),250); return;}
+          await sendChunk(blob,(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,''),type);
+          if(!stopping&&!paused&&current&&!current.end)setTimeout(()=>beginRecorder(type),150);
+        }
+      }finally{
+        if(finishWaiter){const done=finishWaiter;finishWaiter=null;done();}
       }
     };
     recorder.start(1000);
@@ -137,6 +144,44 @@ edgeZone.addEventListener('touchend',e=>{
   const t=e.changedTouches[0],s=edgeGesture; edgeGesture=null;
   if(t && t.clientX-s.x>=70 && Math.abs(t.clientY-s.y)<=80) leaveMeeting();
 },{passive:true});
+
+async function finishMeeting(){
+  if(!current || current.end) return;
+  const btn=$('#finishBtn');
+  btn.disabled=true;
+  btn.textContent=ui==='sv'?'Avslutar…':'Finishing…';
+  $('#speechStatus').textContent=ui==='sv'?'Slutför transkribering…':'Finishing transcription…';
+  diag('FINISH REQUEST');
+  clearInterval(tick); clearTimeout(chunkTimer);
+  stopping=true; paused=false;
+
+  // Flush the final partial MediaRecorder segment before creating Smart Notes.
+  if(recorder?.state==='recording'){
+    finishFlush=true;
+    const stopped=new Promise(resolve=>{
+      finishWaiter=resolve;
+      setTimeout(()=>{if(finishWaiter){finishWaiter=null;resolve();}},12000);
+    });
+    try{recorder.requestData()}catch(_){}
+    try{recorder.stop()}catch(_){if(finishWaiter){const done=finishWaiter;finishWaiter=null;done();}}
+    await stopped;
+  }
+  stream?.getTracks().forEach(t=>t.stop()); stream=null; stopMeter();
+
+  current.transcript=$('#transcript').value.trim();
+  current.end=Date.now();
+  current.sections=structure(current.transcript,current.output);
+  const logs=getLogs();
+  const i=logs.findIndex(x=>x.id===current.id);
+  if(i>=0) logs[i]=current; else logs.push(current);
+  saveLogs(logs);
+  localStorage.removeItem('loggDraft');
+  diag('FINISH ✓ saved');
+  openLog(current.id);
+  btn.disabled=false;
+  btn.textContent=t('finish');
+}
+$('#finishBtn').addEventListener('click',finishMeeting);
 
 function structure(text,lang){
   // Smart Notes v1: local, zero-cost classification. Keeps every utterance in Meeting Notes
@@ -203,4 +248,4 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
 // Purge legacy PWA caches once so iPhone cannot keep executing stale 0.3.x JS.
 (async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-v0.3'))await caches.delete(k)}}catch{}})();
 
-goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.5.0 · '+navigator.userAgent.slice(0,55)),50);
+goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.5.1 · '+navigator.userAgent.slice(0,55)),50);

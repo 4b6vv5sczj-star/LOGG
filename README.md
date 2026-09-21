@@ -1,4 +1,4 @@
-# LOGG v0.5.0 — Clean Core
+# LOGG v0.5.1 — Clean Core
 
 Architecture cleanup release.
 
@@ -11,3 +11,10 @@ Architecture cleanup release.
 - Smart Notes v1 preserved (Summary, Decisions, Actions, Open Questions, Meeting Notes).
 
 Deploy the complete folder to the GitHub repo. Cloud Run will rebuild the backend, but the Speech implementation itself is unchanged.
+
+
+## v0.5.1 Stabilization
+- Restored the missing Finish LOGG event handler.
+- Finish now flushes the final MediaRecorder segment and waits for its transcription before saving.
+- Meeting is then structured with Smart Notes, saved locally, and opened in the result view.
+- Back/navigation architecture from v0.5 is unchanged.

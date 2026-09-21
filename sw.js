@@ -1,5 +1,5 @@
-const CACHE='logg-v0.5.0';
-const FALLBACK=['./index.html','./styles.css?v=0.5.0','./app.js?v=0.5.0','./config.js?v=0.5.0'];
+const CACHE='logg-v0.5.1';
+const FALLBACK=['./index.html','./styles.css?v=0.5.1','./app.js?v=0.5.1','./config.js?v=0.5.1'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FALLBACK)))});
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const k of await caches.keys())if(k!==CACHE)await caches.delete(k);await self.clients.claim()})()));
 self.addEventListener('message',e=>{if(e.data==='SKIP_WAITING')self.skipWaiting()});
