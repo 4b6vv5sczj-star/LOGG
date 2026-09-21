@@ -1,8 +1,25 @@
-# LOGG v0.5.2 — Home Navigation
+# LOGG v0.6.0 — Intelligence & Polish
 
-- Back from live meeting, result, and archive always returns to the lifestyle home view.
-- Saved meetings moved out of the home feed into a separate discreet Archive view.
-- Swipe-right rebuilt on the document surface instead of the iOS/Safari reserved screen edge.
-- Swipe excludes buttons, inputs, selects and textareas to protect normal editing/scrolling.
-- Speech, Finish LOGG and Smart Notes logic otherwise unchanged from v0.5.1.
-- Cache/service-worker references bumped consistently to v0.5.2.
+Built directly from the verified v0.5.2 Home Navigation core freeze.
+
+## Core freeze preserved
+- Home / Meeting / Result / Archive navigation
+- Back and swipe behaviour
+- Finish LOGG flow
+- Google Chirp 3 recording/transcription pipeline
+- Local save/archive and Word export
+
+## Intelligence v2
+- Smarter local classification of decisions, actions, open questions and discussion
+- Swedish, English, Finnish and Spanish meeting cues; mixed English yacht terminology supported
+- Action owner/deadline extraction with explicit uncertainty marker
+- Extractive summary only: does not invent facts
+- Raw transcript is always preserved as Meeting Notes
+- No additional AI/API cost in this version
+
+## Polish
+- Refined premium stationery treatment, typography rhythm and section hierarchy
+- Intelligence provenance strip on result page
+- All cache/assets versioned 0.6.0
+
+Important: Google speech behaviour was intentionally not changed because v0.5.2 is the frozen working baseline.

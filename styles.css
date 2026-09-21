@@ -25,3 +25,21 @@ body[data-view="live"] #edgeBackZone{display:block}
 #edgeBackZone{display:none!important}
 body[data-view="archive"] .topbar{display:none}
 .view{opacity:0}.view.active{display:block;animation:loggViewIn .24s ease-out forwards}@keyframes loggViewIn{from{opacity:0;transform:translateX(6px)}to{opacity:1;transform:none}}
+
+
+/* v0.6 Intelligence & Polish — visual refinement only; v0.5.2 core navigation is frozen. */
+:root{--paper:#f5f0e6;--paper-deep:#eee6d7;--ink:#1b1b18;--taupe:#766f64;--champ:#aa8954;--line:#d8cdbc}
+.stationery{background:linear-gradient(105deg,var(--paper) 0%,#f8f4eb 48%,var(--paper-deep) 140%)}
+.stationery:before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.22;background:linear-gradient(90deg,transparent 0 76%,#a98b5c10 76.1%,transparent 76.5%)}
+.stationery>*{position:relative;z-index:1}
+.paper-mark{letter-spacing:.08em;font-weight:800}.paper-mark small{letter-spacing:.19em;font-weight:600}
+.rule{margin-top:18px;background:linear-gradient(90deg,#a98b5c 0,#d7c8af 28%,transparent 82%)}
+.live-state{padding-top:5px}.live-state i{box-shadow:0 0 0 4px #75826716}
+#transcript{font-size:15.5px;line-height:1.9;caret-color:var(--champ)}
+.paper-btn,.primary{transition:transform .16s ease,opacity .16s ease,background .16s ease}.paper-btn:active,.primary:active{transform:scale(.985)}
+.intelligence-note{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:4px 0 18px;padding:11px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);color:var(--champ)}
+.intelligence-note span{font-size:8px;letter-spacing:.17em;font-weight:800}.intelligence-note b{font-size:8px;color:var(--taupe);font-weight:600;text-align:right}
+.section-card{padding:28px 0}.section-card h3{display:flex;align-items:center;gap:9px}.section-card h3:before{content:"";width:18px;height:1px;background:var(--champ)}
+.section-card textarea{font-size:14.5px;line-height:1.78;min-height:112px}
+.hero-copy{max-width:640px}.hero-copy p{font-size:13.5px;letter-spacing:.005em}.ghost-start{transition:padding .2s ease,border-color .2s ease}.ghost-start:active{padding-left:5px;padding-right:5px}
+@media(max-width:420px){.intelligence-note{align-items:flex-start;flex-direction:column;gap:4px}.intelligence-note b{text-align:left}.stationery{padding-left:20px;padding-right:20px}}
