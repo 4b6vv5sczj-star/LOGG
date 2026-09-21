@@ -13,7 +13,8 @@ $('#clearAll').onclick=()=>{if(confirm(ui==='sv'?'Rensa alla lokalt sparade LOGG
 $('#startBtn').onclick=()=>{let name=$('#meetingName').value.trim();if(!name||!$('#consent').checked){toast(t('nameRequired'));return}current={id:Date.now().toString(),name,start:Date.now(),end:null,output:$('#outputLang').value,transcript:'',sections:null};finalText='';$('#transcript').value='';$('#liveTitle').textContent=name;$('#liveDate').textContent=fmt(current.start);show('live');startTimer();startSpeech()};
 function startTimer(){clearInterval(tick);let f=()=>$('#timer').textContent=duration(Date.now()-current.start);f();tick=setInterval(f,1000)}
 function speechDetail(msg=''){const el=$('#speechDetail');if(el)el.textContent=msg}
-let recorder=null, stream=null, chunks=[], uploadBusy=false, chunkTimer=null, audioCtx=null, analyser=null, meterRAF=null, stopping=false;
+let recorder=null, stream=null, chunks=[], uploadBusy=false, chunkTimer=null, audioCtx=null, analyser=null, meterRAF=null, stopping=false, chunkBytes=0, chunkCount=0;
+function diag(msg){const el=$('#diagnostics');if(el){const stamp=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});el.textContent=stamp+' · '+msg+'\n'+el.textContent.split('\n').slice(0,5).join('\n')}}
 const MARINE_HINTS=['superyacht','sailing yacht','Baltic Yachts','fairing','prepreg','infusion','lamination','bulkhead','deckhouse','passerelle','tender garage','beach club','sea trial','commissioning','classification','class','flag state','HVAC','AV IT','joinery','outfitting','rigging','carbon mast','boom','standing rigging','running rigging','hydraulics','composites','teak deck'];
 async function checkBackend(base){
   const r=await fetch(base+'/health',{cache:'no-store'});
@@ -22,7 +23,8 @@ async function checkBackend(base){
 }
 function chooseMimeType(){
   if(!window.MediaRecorder) return '';
-  const candidates=['audio/webm;codecs=opus','audio/webm','audio/mp4;codecs=mp4a.40.2','audio/mp4','audio/aac'];
+  const apple=/iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+  const candidates=apple?['audio/mp4','audio/mp4;codecs=mp4a.40.2','audio/aac','audio/webm;codecs=opus','audio/webm']:['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/aac'];
   return candidates.find(x=>MediaRecorder.isTypeSupported(x))||'';
 }
 function startMeter(mediaStream){
@@ -40,17 +42,17 @@ async function startSpeech(){
   stopping=false;
   $('#speechStatus').textContent=ui==='sv'?'Kontrollerar Google…':'Checking Google…'; speechDetail('');
   if(!base){ $('#speechStatus').textContent=ui==='sv'?'Google ej konfigurerad':'Google not configured'; return; }
-  try{ await checkBackend(base); }catch(e){ $('#speechStatus').textContent=ui==='sv'?'Google ej nåbar':'Google unavailable'; speechDetail(ui==='sv'?'Cloud Run svarar inte. Kontrollera backend-adressen.':'Cloud Run is not responding. Check the backend URL.'); return; }
+  try{ const h=await checkBackend(base); diag('CLOUD ✓ '+(h.version||'')); }catch(e){ $('#speechStatus').textContent=ui==='sv'?'Google ej nåbar':'Google unavailable'; speechDetail(ui==='sv'?'Cloud Run svarar inte. Kontrollera backend-adressen.':'Cloud Run is not responding. Check the backend URL.'); return; }
   if(!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder){
     $('#speechStatus').textContent=ui==='sv'?'Mikrofon stöds inte':'Microphone unsupported'; return;
   }
   try{
     $('#speechStatus').textContent=ui==='sv'?'Begär mikrofon…':'Requesting microphone…';
-    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}); diag('MIC ✓ track='+stream.getAudioTracks().length);
     startMeter(stream);
     const type=chooseMimeType();
     if(!type) throw new Error('No supported recording format');
-    beginRecorder(type);
+    diag('FORMAT '+type); beginRecorder(type);
     $('#speechStatus').textContent=ui==='sv'?'MIC ✓ · GOOGLE ✓ · LYSSNAR':'MIC ✓ · GOOGLE ✓ · LISTENING';
     speechDetail((ui==='sv'?'Google Chirp 3 · Auto språk · ':'Google Chirp 3 · Auto language · ')+type.replace('audio/','').toUpperCase());
   }catch(e){
@@ -60,25 +62,42 @@ async function startSpeech(){
 }
 function beginRecorder(type){
   if(!stream||stopping)return;
-  recorder=new MediaRecorder(stream,{mimeType:type}); chunks=[];
-  recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
-  recorder.onstop=async()=>{
-    const blob=new Blob(chunks,{type}); chunks=[];
-    if(!stopping&&!paused&&current&&!current.end){ await sendChunk(blob,(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,''),type); if(!stopping&&!paused&&current&&!current.end) beginRecorder(type); }
-  };
-  recorder.start(); clearTimeout(chunkTimer); chunkTimer=setTimeout(()=>{if(recorder?.state==='recording')recorder.stop()},8000);
+  try{
+    recorder=new MediaRecorder(stream,{mimeType:type}); chunks=[]; chunkBytes=0; chunkCount=0;
+    recorder.onerror=e=>diag('RECORDER ERROR '+(e.error?.message||e.error?.name||'unknown'));
+    recorder.onstart=()=>diag('RECORDING ✓');
+    recorder.ondataavailable=e=>{if(e.data&&e.data.size){chunks.push(e.data);chunkBytes+=e.data.size;chunkCount++;diag('AUDIO '+chunkCount+' chunks · '+Math.round(chunkBytes/1024)+' KB')}};
+    recorder.onstop=async()=>{
+      clearTimeout(chunkTimer);
+      const blob=new Blob(chunks,{type}); chunks=[];
+      diag('STOP ✓ · '+Math.round(blob.size/1024)+' KB');
+      if(!stopping&&!paused&&current&&!current.end){
+        if(blob.size<800){diag('AUDIO TOO SMALL · restarting'); setTimeout(()=>beginRecorder(type),250); return;}
+        await sendChunk(blob,(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,''),type);
+        if(!stopping&&!paused&&current&&!current.end)setTimeout(()=>beginRecorder(type),150);
+      }
+    };
+    recorder.start(1000);
+    chunkTimer=setTimeout(()=>{
+      diag('8s · STOP REQUEST');
+      if(recorder?.state==='recording'){
+        try{recorder.requestData()}catch(_){}
+        setTimeout(()=>{if(recorder?.state==='recording')recorder.stop()},150);
+      }
+    },8000);
+  }catch(e){diag('RECORDER CREATE ERROR '+e.message);throw e}
 }
 async function sendChunk(blob,base,type){
-  if(uploadBusy||blob.size<800)return; uploadBusy=true;
+  if(uploadBusy){diag('UPLOAD BUSY · skipped');return} if(blob.size<800){diag('AUDIO <800B · skipped');return} uploadBusy=true; diag('UPLOADING '+Math.round(blob.size/1024)+' KB');
   try{
     $('#speechStatus').textContent=ui==='sv'?'Transkriberar…':'Transcribing…';
     const ext=type.includes('mp4')?'m4a':type.includes('webm')?'webm':'audio';
     let fd=new FormData(); fd.append('audio',blob,'chunk.'+ext); fd.append('phrases',JSON.stringify(MARINE_HINTS));
-    let r=await fetch(base+'/api/transcribe',{method:'POST',body:fd});
+    let r=await fetch(base+'/api/transcribe',{method:'POST',body:fd}); diag('GOOGLE HTTP '+r.status);
     if(!r.ok) throw Error(await r.text()); let j=await r.json();
-    if(j.transcript){ finalText=(finalText.trim()+' '+j.transcript.trim()).trim(); $('#transcript').value=finalText; current.transcript=finalText; localStorage.loggDraft=JSON.stringify(current); }
+    if(j.transcript){diag('TEXT ✓ '+j.transcript.length+' chars'); finalText=(finalText.trim()+' '+j.transcript.trim()).trim(); $('#transcript').value=finalText; current.transcript=finalText; localStorage.loggDraft=JSON.stringify(current); }
     $('#speechStatus').textContent=ui==='sv'?'MIC ✓ · GOOGLE ✓ · LYSSNAR':'MIC ✓ · GOOGLE ✓ · LISTENING';
-  }catch(e){ console.error(e); $('#speechStatus').textContent=ui==='sv'?'Google-fel':'Google error'; speechDetail(e.message||'Transcription failed'); }finally{uploadBusy=false}
+  }catch(e){ console.error(e); diag('ERROR '+(e.message||e)); $('#speechStatus').textContent=ui==='sv'?'Google-fel':'Google error'; speechDetail(e.message||'Transcription failed'); }finally{uploadBusy=false}
 }
 function stopSpeech(discard=true){
   stopping=true; clearTimeout(chunkTimer);
@@ -87,7 +106,8 @@ function stopSpeech(discard=true){
 }
 $('#transcript').oninput=e=>{finalText=e.target.value+' ';if(current)current.transcript=e.target.value};
 $('#pauseBtn').onclick=()=>{paused=!paused;if(paused){stopSpeech(true);$('#pauseBtn').textContent=t('resume');$('#speechStatus').textContent=t('paused')}else{stopping=false;startSpeech();$('#pauseBtn').textContent=t('pause')}};
-$('#backLive').onclick=()=>{ $('#leaveTitle').textContent=ui==='sv'?'Lämna mötet?':'Leave meeting?'; $('#leaveText').textContent=ui==='sv'?'Utkastet sparas lokalt.':'Your draft is saved locally.'; $('#stayBtn').textContent=ui==='sv'?'Fortsätt mötet':'Continue meeting'; $('#leaveBtn').textContent=ui==='sv'?'Spara utkast & lämna':'Save draft & leave'; $('#leaveDialog').hidden=false; };
+function openLeaveDialog(e){if(e){e.preventDefault();e.stopPropagation()} diag('BACK ✓'); $('#leaveTitle').textContent=ui==='sv'?'Lämna mötet?':'Leave meeting?'; $('#leaveText').textContent=ui==='sv'?'Utkastet sparas lokalt.':'Your draft is saved locally.'; $('#stayBtn').textContent=ui==='sv'?'Fortsätt mötet':'Continue meeting'; $('#leaveBtn').textContent=ui==='sv'?'Spara utkast & lämna':'Save draft & leave'; $('#leaveDialog').hidden=false;}
+$('#backLive').addEventListener('click',openLeaveDialog); $('#backLive').addEventListener('touchend',openLeaveDialog,{passive:false});
 $('#stayBtn').onclick=()=>{$('#leaveDialog').hidden=true};
 $('#leaveBtn').onclick=()=>{if(current){current.transcript=$('#transcript').value.trim();localStorage.loggDraft=JSON.stringify(current)} stopSpeech(true);clearInterval(tick);current=null;$('#leaveDialog').hidden=true;show('home');renderRecent()};
 $('#finishBtn').onclick=()=>{stopSpeech(true);clearInterval(tick);current.end=Date.now();current.transcript=$('#transcript').value.trim();current.sections=structure(current.transcript,current.output);let logs=getLogs();logs.push(current);saveLogs(logs.slice(-50));openLog(current.id)};
@@ -103,7 +123,7 @@ $('#wordBtn').onclick=()=>{let s=current.sections,body=p('LOGG',true,34)+p('MEET
 $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.3.0',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.3.1',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
@@ -119,4 +139,4 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
     if(refreshing) return; refreshing=true; window.location.reload();
   });
 }
-applyLang();renderRecent();
+applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.3.1 · '+navigator.userAgent.slice(0,55)),50);
