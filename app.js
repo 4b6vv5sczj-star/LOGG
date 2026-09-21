@@ -339,7 +339,7 @@ $('#wordBtn').onclick=()=>{let s=current.sections,body=p('LOGG',true,34)+p('MEET
 $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.7.0',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.7.2',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
@@ -358,4 +358,4 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
 // Purge legacy PWA caches once so iPhone cannot keep executing stale 0.3.x JS.
 (async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-v0.3'))await caches.delete(k)}}catch{}})();
 
-goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.7.0 · '+navigator.userAgent.slice(0,55)),50);
+goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.7.2 · '+navigator.userAgent.slice(0,55)),50);

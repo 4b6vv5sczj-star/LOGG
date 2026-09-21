@@ -1,4 +1,4 @@
-# LOGG v0.7.1.0 — Intelligence & Polish
+# LOGG v0.7.2 — Intelligence & Polish
 
 Built directly from the verified v0.5.2 Home Navigation core freeze.
 
@@ -20,7 +20,7 @@ Built directly from the verified v0.5.2 Home Navigation core freeze.
 ## Polish
 - Refined premium stationery treatment, typography rhythm and section hierarchy
 - Intelligence provenance strip on result page
-- All cache/assets versioned 0.7.0
+- All cache/assets versioned 0.7.2
 
 Important: Google speech behaviour was intentionally not changed because v0.5.2 is the frozen working baseline.
 
@@ -37,7 +37,7 @@ Important: Google speech behaviour was intentionally not changed because v0.5.2 
 - Word export is intentionally not overhauled in this release.
 
 
-## v0.7.1 Lifestyle polish
+## v0.7.2 Lifestyle polish
 - Added the approved distant sailing-yacht lifestyle artwork below Saved meetings.
 - Subtle dark fade integrates the image into the home view.
 - No Intelligence, speech, navigation, meeting flow, archive, or export logic changed.

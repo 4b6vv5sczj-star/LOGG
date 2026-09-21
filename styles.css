@@ -44,8 +44,11 @@ body[data-view="archive"] .topbar{display:none}
 .hero-copy{max-width:640px}.hero-copy p{font-size:13.5px;letter-spacing:.005em}.ghost-start{transition:padding .2s ease,border-color .2s ease}.ghost-start:active{padding-left:5px;padding-right:5px}
 @media(max-width:420px){.intelligence-note{align-items:flex-start;flex-direction:column;gap:4px}.intelligence-note b{text-align:left}.stationery{padding-left:20px;padding-right:20px}}
 
-/* v0.7.1 lifestyle polish — visual only; v0.7 intelligence/core frozen */
-.home-lifestyle{position:relative;margin:22px -24px -42px;height:210px;overflow:hidden;pointer-events:none;opacity:.82}
-.home-lifestyle:before{content:"";position:absolute;z-index:2;inset:0;background:linear-gradient(180deg,#121310 0%,transparent 24%,transparent 63%,#11120f 100%)}
-.home-lifestyle img{width:100%;height:100%;display:block;object-fit:cover;object-position:50% 57%;filter:saturate(.72) contrast(1.04) brightness(.78)}
-@media(max-width:420px){.home-lifestyle{height:220px;margin-top:20px}.home-lifestyle img{object-position:50% 55%}}
+/* v0.7.2 Home Composition Polish — visual only; upper hero/core frozen. */
+/* The yacht image is deliberately OUTSIDE .hero-copy so it cannot compress or reposition the upper home composition. */
+#home{background:#11120f;min-height:100dvh;overflow:hidden}
+#home>.hero-photo{height:70dvh;min-height:570px;flex:none}
+.home-lifestyle{position:relative;width:100%;height:max(30dvh,300px);min-height:300px;overflow:hidden;pointer-events:none;background:#11120f}
+.home-lifestyle:before{content:"";position:absolute;z-index:2;inset:0;background:linear-gradient(180deg,#11120f 0%,rgba(17,18,15,.78) 7%,rgba(17,18,15,.22) 20%,transparent 38%,transparent 72%,#11120f 100%)}
+.home-lifestyle img{width:100%;height:100%;display:block;object-fit:cover;object-position:50% 44%;filter:saturate(.72) contrast(1.04) brightness(.76);transform:scale(1.015)}
+@media(max-width:420px){#home>.hero-photo{height:70dvh;min-height:570px}.home-lifestyle{height:max(30dvh,330px);min-height:330px}.home-lifestyle img{object-position:54% 42%}}
