@@ -1,27 +1,33 @@
-# LOGG — Meetings on Course · v0.1 GitHub Pages
+# LOGG v0.2 — Meetings on Course
 
-Mobile-first PWA prototype for iPhone and Android.
+Mobile-first PWA prototype with the new superyacht-lifestyle / premium-stationery UX and a secure Google Cloud Speech-to-Text V2 backend scaffold.
 
-## Publish with GitHub Pages
-1. Create a new GitHub repository, for example `LOGG`.
-2. Upload **the contents of this folder** to the repository root (do not upload the outer folder itself).
-3. Commit the files.
-4. In GitHub open **Settings → Pages**.
-5. Under **Build and deployment**, choose **Deploy from a branch**.
-6. Select branch **main** and folder **/(root)**, then Save.
-7. GitHub will show the public HTTPS address when deployment is ready.
+## What changed
+- Lifestyle landing page and premium stationery meeting/result views.
+- UI in English / Swedish.
+- Google Speech-to-Text V2 `chirp_3` backend; Google credentials never go into GitHub Pages.
+- Automatic/language-agnostic transcription configuration and inline Marine Lexicon adaptation.
+- Browser sends short live microphone chunks to the backend. LOGG does not intentionally persist those audio chunks.
+- Local text autosave, editable meeting log, Copy and Word export retained.
 
-## iPhone
-Open the GitHub Pages address in Safari. Use Share → Add to Home Screen → Add. Open LOGG from the new Home Screen icon for standalone mode.
+## Frontend (GitHub Pages)
+Upload the frontend files/folders in this package to your GitHub Pages repository. In `config.js`, set:
 
-## Android
-Open the address in Chrome. Choose Add to Home screen / Install app when offered.
+`window.LOGG_CONFIG = { API_BASE: "https://YOUR-BACKEND-URL" };`
 
-## v0.1 notes
-- Meeting name is entered manually; date/time/duration are automatic.
-- UI: Swedish / English.
-- Output: Swedish / English.
-- Notes are autosaved locally in the browser; no audio file is saved by LOGG.
-- Word (.docx) export is generated locally in the browser.
-- Browser speech recognition support varies. This prototype does **not yet** provide the final automatic SV/FI/EN/ES switching, Jakobstad/Ostrobothnian dialect handling, or marine/superyacht vocabulary engine. Those require the next speech-engine layer.
-- Microphone-related browser features require HTTPS; GitHub Pages provides HTTPS.
+Do not put a Google API key, service-account JSON, or any other secret in `config.js`.
+
+## Google Cloud backend
+1. Create/select a Google Cloud project and enable **Cloud Speech-to-Text API**.
+2. Keep billing/free-tier controls in your Google Cloud account.
+3. Deploy the `backend/` folder to a server such as Cloud Run using a service identity that can call Speech-to-Text.
+4. Set `GOOGLE_CLOUD_PROJECT` to the project ID and `GOOGLE_SPEECH_REGION=eu`.
+5. Put the resulting HTTPS backend URL into frontend `config.js`.
+
+The backend uses Application Default Credentials / the hosting service identity, not credentials committed to source control.
+
+## Important v0.2 limitations
+- This is a prototype, not a production privacy/compliance implementation. Verify Google Cloud data handling, retention, IAM, logging, region, consent wording and company policy before workplace use.
+- The browser uses ~12-second audio chunks for a simple mobile prototype. A later version should use a persistent streaming bridge for lower latency and cleaner context across chunk boundaries.
+- Dialect recognition (including Jakobstad/Ostrobothnian Swedish) must be measured with real test speech. Marine adaptation can improve specialist terms but does not guarantee dialect accuracy.
+- The hero currently uses a CSS-created luxury dusk atmosphere so the repo contains no unlicensed yacht photograph. Replace it with a properly licensed/owned hero photograph before brand release.
