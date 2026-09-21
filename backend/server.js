@@ -53,4 +53,4 @@ app.post('/api/transcribe', upload.single('audio'), async(req,res)=>{
 });
 
 const port=process.env.PORT||8080;
-app.listen(port,()=>console.log(`LOGG backend v0.3.2 on ${port}; STT=${region}-speech.googleapis.com`));
+app.listen(port,()=>console.log(`LOGG backend v0.3.4 on ${port}; STT=${region}-speech.googleapis.com`));

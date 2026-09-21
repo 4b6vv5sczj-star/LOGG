@@ -46,18 +46,27 @@ The service worker now uses network-first loading, activates new builds immediat
 Google transcription still requires `window.LOGG_CONFIG.API_BASE` to point to the deployed secure backend. Credentials must never be placed in the GitHub Pages frontend.
 
 
-## v0.3.0 deployment
+## v0.3.4 deployment
 Frontend config points to the Cloud Run service already created for LOGG. Upload all frontend files to the GitHub Pages repository. The backend folder is deployed by Cloud Run from `/backend/Dockerfile`. Set Cloud Run runtime service account to `LOGG Speech`. No JSON credentials belong in this repository.
 
 On iPhone, LOGG chooses the first MediaRecorder format Safari supports (MP4/AAC on Safari where available; WebM/Opus elsewhere). Google Speech-to-Text V2 auto-decoding supports both MP4/AAC and WebM/Opus.
 
 
-## v0.3.3 diagnostic
+## v0.3.4 diagnostic
 Adds visible iPhone recording pipeline diagnostics, prefers MP4 on Apple devices, records with 1-second MediaRecorder timeslices, explicitly requests final data before stopping, and adds a touch-safe Back control. The diagnostics show CLOUD, MIC, FORMAT, RECORDING, AUDIO KB, STOP, UPLOADING, HTTP and TEXT stages.
 
 
-## v0.3.3
+## v0.3.4
 - Normal meeting view cleaned up; diagnostics are hidden by default. Add `?debug=1` to the app URL to show them.
 - Back arrow now immediately saves the draft locally, stops microphone capture, and returns to the LOGG home screen.
 - Speech status simplified to Listening / Transcribing.
-- Keeps the working EU Chirp 3 backend configuration from v0.3.2.
+- Keeps the working EU Chirp 3 backend configuration from v0.3.4.
+
+## v0.3.4 — Swipe Back
+- Left-edge swipe right (80px+) returns from a live meeting to Home.
+- Visible Back arrow remains and calls the exact same `leaveMeeting()` function.
+- Leaving saves the transcript draft locally and stops the microphone first.
+- No browser history/navigation is used.
+- Back tap target enlarged to 56×56px for iPhone.
+- All frontend/service-worker asset versions aligned to v0.3.4.
+- Google Speech/Chirp transcription path is unchanged from the working v0.3.4 baseline.

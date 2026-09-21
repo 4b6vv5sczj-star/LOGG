@@ -108,7 +108,24 @@ function stopSpeech(discard=true){
 $('#transcript').oninput=e=>{finalText=e.target.value+' ';if(current)current.transcript=e.target.value};
 $('#pauseBtn').onclick=()=>{paused=!paused;if(paused){stopSpeech(true);$('#pauseBtn').textContent=t('resume');$('#speechStatus').textContent=t('paused')}else{stopping=false;startSpeech();$('#pauseBtn').textContent=t('pause')}};
 function leaveMeeting(){if(current){current.transcript=$('#transcript').value.trim();localStorage.loggDraft=JSON.stringify(current)} stopSpeech(true);clearInterval(tick);current=null;show('home');renderRecent()}
-$('#backLive').onclick=leaveMeeting;
+// One navigation path for both the visible Back button and iPhone edge-swipe.
+// Pointer/touch handlers are deliberately attached directly and do not use browser history.
+const backLive=$('#backLive');
+backLive.onclick=(e)=>{ e.preventDefault(); e.stopPropagation(); leaveMeeting(); };
+
+let edgeSwipe=null;
+const SWIPE_EDGE=32, SWIPE_MIN_X=80, SWIPE_MAX_Y=70;
+function swipeStart(x,y){
+  if(!$('#live').classList.contains('active') || x>SWIPE_EDGE) return;
+  edgeSwipe={x,y};
+}
+function swipeEnd(x,y){
+  if(!edgeSwipe) return;
+  const dx=x-edgeSwipe.x, dy=Math.abs(y-edgeSwipe.y); edgeSwipe=null;
+  if(dx>=SWIPE_MIN_X && dy<=SWIPE_MAX_Y) leaveMeeting();
+}
+document.addEventListener('touchstart',e=>{const t=e.changedTouches[0]; if(t) swipeStart(t.clientX,t.clientY)}, {passive:true});
+document.addEventListener('touchend',e=>{const t=e.changedTouches[0]; if(t) swipeEnd(t.clientX,t.clientY)}, {passive:true});
 $('#stayBtn').onclick=()=>{$('#leaveDialog').hidden=true};
 $('#leaveBtn').onclick=()=>{if(current){current.transcript=$('#transcript').value.trim();localStorage.loggDraft=JSON.stringify(current)} stopSpeech(true);clearInterval(tick);current=null;$('#leaveDialog').hidden=true;show('home');renderRecent()};
 $('#finishBtn').onclick=()=>{stopSpeech(true);clearInterval(tick);current.end=Date.now();current.transcript=$('#transcript').value.trim();current.sections=structure(current.transcript,current.output);let logs=getLogs();logs.push(current);saveLogs(logs.slice(-50));openLog(current.id)};
@@ -140,4 +157,4 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
     if(refreshing) return; refreshing=true; window.location.reload();
   });
 }
-applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.3.3 · '+navigator.userAgent.slice(0,55)),50);
+applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.3.4 · '+navigator.userAgent.slice(0,55)),50);
