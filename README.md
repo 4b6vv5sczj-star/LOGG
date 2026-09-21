@@ -31,3 +31,7 @@ The backend uses Application Default Credentials / the hosting service identity,
 - The browser uses ~12-second audio chunks for a simple mobile prototype. A later version should use a persistent streaming bridge for lower latency and cleaner context across chunk boundaries.
 - Dialect recognition (including Jakobstad/Ostrobothnian Swedish) must be measured with real test speech. Marine adaptation can improve specialist terms but does not guarantee dialect accuracy.
 - The hero currently uses a CSS-created luxury dusk atmosphere so the repo contains no unlicensed yacht photograph. Replace it with a properly licensed/owned hero photograph before brand release.
+
+
+## v0.2.1 – iPhone/Safari cache fix
+The service worker now uses network-first loading, activates new builds immediately, clears old caches, bypasses HTTP cache when checking app files, and reloads once when a new service worker takes control. Static assets are versioned with query strings. This is intended to make GitHub Pages updates appear promptly on iPhone/PWA installs while retaining offline fallback.

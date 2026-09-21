@@ -41,4 +41,23 @@ $('#copyBtn').onclick=async()=>{await navigator.clipboard.writeText(plain());toa
 const crcTable=(()=>{let t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();function crc32(a){let c=0xffffffff;for(let b of a)c=crcTable[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0}function u16(n){return[n&255,n>>>8&255]}function u32(n){return[n&255,n>>>8&255,n>>>16&255,n>>>24&255]}function zip(files){let enc=new TextEncoder(),out=[],central=[],off=0;for(let [name,content] of files){let nb=enc.encode(name),data=enc.encode(content),crc=crc32(data),h=[0x50,0x4b,3,4,...u16(20),0,0,0,0,0,0,...u32(crc),...u32(data.length),...u32(data.length),...u16(nb.length),0,0,...nb,...data];out.push(...h);central.push([name,nb,data,crc,off]);off+=h.length}let cstart=off;for(let [name,nb,data,crc,loff] of central){let h=[0x50,0x4b,1,2,...u16(20),...u16(20),0,0,0,0,0,0,...u32(crc),...u32(data.length),...u32(data.length),...u16(nb.length),0,0,0,0,0,0,0,0,...u32(loff),...nb];out.push(...h);off+=h.length}let csize=off-cstart;out.push(0x50,0x4b,5,6,0,0,0,0,...u16(central.length),...u16(central.length),...u32(csize),...u32(cstart),0,0);return new Uint8Array(out)}
 function xml(s){return String(s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]))}function p(text,bold=false,size=22){return `<w:p><w:r><w:rPr>${bold?'<w:b/>':''}<w:sz w:val="${size}"/><w:rFonts w:ascii="Manrope" w:hAnsi="Manrope"/></w:rPr><w:t xml:space="preserve">${xml(text)}</w:t></w:r></w:p>`}
 $('#wordBtn').onclick=()=>{let s=current.sections,body=p('LOGG',true,34)+p('MEETINGS ON COURSE',false,16)+p(current.name,true,28)+p(`${fmt(current.start)} · ${duration(current.end-current.start)}`,false,18);for(let [title,key] of [[t('summary'),'summary'],[t('decisions'),'decisions'],[t('actions'),'actions'],[t('questions'),'questions'],[t('notes'),'notes']]){body+=p(title.toUpperCase(),true,20);for(let line of s[key].split('\n'))body+=p(line,false,21)}let files=[['[Content_Types].xml','<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'],['_rels/.rels','<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],['word/document.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr></w:body></w:document>`]];let blob=new Blob([zip(files)],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`LOGG_${current.name.replace(/[^a-z0-9åäö_-]+/gi,'_')}.docx`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
-$('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});applyLang();renderRecent();
+$('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker' in navigator){
+  window.addEventListener('load', async()=>{
+    try{
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.2.1',{updateViaCache:'none'});
+      await reg.update();
+      if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
+      reg.addEventListener('updatefound',()=>{
+        const worker=reg.installing;
+        if(worker) worker.addEventListener('statechange',()=>{
+          if(worker.state==='installed' && navigator.serviceWorker.controller) worker.postMessage('SKIP_WAITING');
+        });
+      });
+    }catch(e){ console.warn('LOGG service worker update failed',e); }
+  });
+  let refreshing=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(refreshing) return; refreshing=true; window.location.reload();
+  });
+}
+applyLang();renderRecent();
