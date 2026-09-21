@@ -4,13 +4,13 @@ let ui=localStorage.loggUi||'en', current=null, tick=null, recognition=null, pau
 function t(k){return I[ui][k]||k} function toast(x){$('#toast').textContent=x;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),1800)}
 function applyLang(){document.documentElement.lang=ui;$$('[data-i18n]').forEach(e=>e.textContent=t(e.dataset.i18n));$$('[data-i18n-placeholder]').forEach(e=>e.placeholder=t(e.dataset.i18nPlaceholder));$('#uiLang').textContent=ui==='en'?'SV':'EN';renderRecent()}
 $('#uiLang').onclick=()=>{ui=ui==='en'?'sv':'en';localStorage.loggUi=ui;applyLang()};
-function show(id){$$('.view').forEach(v=>v.classList.remove('active'));$('#'+id).classList.add('active');scrollTo(0,0)}
+function goTo(id){$$('.view').forEach(v=>v.classList.toggle('active',v.id===id));document.body.dataset.view=id;window.scrollTo(0,0)}
 function fmt(d){return new Intl.DateTimeFormat(ui==='sv'?'sv-FI':'en-GB',{dateStyle:'medium',timeStyle:'short'}).format(new Date(d))} function duration(ms){let s=Math.floor(ms/1000),m=Math.floor(s/60);return `${String(m).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`}
 function getLogs(){try{return JSON.parse(localStorage.loggLogs||'[]')}catch{return[]}} function saveLogs(x){localStorage.loggLogs=JSON.stringify(x)}
 function renderRecent(){let x=getLogs(),el=$('#recentList');el.innerHTML=x.length?x.slice().reverse().slice(0,8).map(l=>`<div class="recent-item" data-id="${l.id}"><div><div class="recent-title">${esc(l.name)}</div><div class="recent-meta">${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}</div></div><div>›</div></div>`).join(''):`<div class="empty">${t('empty')}</div>`;$$('.recent-item').forEach(e=>e.onclick=()=>openLog(e.dataset.id))}
 function esc(s=''){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 $('#clearAll').onclick=()=>{if(confirm(ui==='sv'?'Rensa alla lokalt sparade LOGGar?':'Clear all locally saved LOGGs?')){saveLogs([]);renderRecent()}};
-$('#startBtn').onclick=()=>{let name=$('#meetingName').value.trim();if(!name||!$('#consent').checked){toast(t('nameRequired'));return}current={id:Date.now().toString(),name,start:Date.now(),end:null,output:$('#outputLang').value,transcript:'',sections:null};finalText='';$('#transcript').value='';$('#liveTitle').textContent=name;$('#liveDate').textContent=fmt(current.start);show('live');startTimer();startSpeech()};
+$('#startBtn').onclick=()=>{let name=$('#meetingName').value.trim();if(!name||!$('#consent').checked){toast(t('nameRequired'));return}current={id:Date.now().toString(),name,start:Date.now(),end:null,output:$('#outputLang').value,transcript:'',sections:null};finalText='';$('#transcript').value='';$('#liveTitle').textContent=name;$('#liveDate').textContent=fmt(current.start);goTo('live');startTimer();startSpeech()};
 function startTimer(){clearInterval(tick);let f=()=>$('#timer').textContent=duration(Date.now()-current.start);f();tick=setInterval(f,1000)}
 function speechDetail(msg=''){const el=$('#speechDetail');if(el)el.textContent=msg}
 let recorder=null, stream=null, chunks=[], uploadBusy=false, chunkTimer=null, audioCtx=null, analyser=null, meterRAF=null, stopping=false, chunkBytes=0, chunkCount=0;
@@ -107,28 +107,37 @@ function stopSpeech(discard=true){
 }
 $('#transcript').oninput=e=>{finalText=e.target.value+' ';if(current)current.transcript=e.target.value};
 $('#pauseBtn').onclick=()=>{paused=!paused;if(paused){stopSpeech(true);$('#pauseBtn').textContent=t('resume');$('#speechStatus').textContent=t('paused')}else{stopping=false;startSpeech();$('#pauseBtn').textContent=t('pause')}};
-function leaveMeeting(){if(current){current.transcript=$('#transcript').value.trim();localStorage.loggDraft=JSON.stringify(current)} stopSpeech(true);clearInterval(tick);current=null;show('home');renderRecent()}
-// One navigation path for both the visible Back button and iPhone edge-swipe.
-// Pointer/touch handlers are deliberately attached directly and do not use browser history.
-const backLive=$('#backLive');
-backLive.onclick=(e)=>{ e.preventDefault(); e.stopPropagation(); leaveMeeting(); };
+function saveDraft(){
+  if(!current)return;
+  current.transcript=$('#transcript').value.trim();
+  localStorage.loggDraft=JSON.stringify(current);
+}
+function leaveMeeting(){
+  saveDraft();
+  stopSpeech(true);
+  clearInterval(tick);
+  current=null;
+  goTo('home');
+  renderRecent();
+}
 
-let edgeSwipe=null;
-const SWIPE_EDGE=32, SWIPE_MIN_X=80, SWIPE_MAX_Y=70;
-function swipeStart(x,y){
-  if(!$('#live').classList.contains('active') || x>SWIPE_EDGE) return;
-  edgeSwipe={x,y};
-}
-function swipeEnd(x,y){
-  if(!edgeSwipe) return;
-  const dx=x-edgeSwipe.x, dy=Math.abs(y-edgeSwipe.y); edgeSwipe=null;
-  if(dx>=SWIPE_MIN_X && dy<=SWIPE_MAX_Y) leaveMeeting();
-}
-document.addEventListener('touchstart',e=>{const t=e.changedTouches[0]; if(t) swipeStart(t.clientX,t.clientY)}, {passive:true});
-document.addEventListener('touchend',e=>{const t=e.changedTouches[0]; if(t) swipeEnd(t.clientX,t.clientY)}, {passive:true});
-$('#stayBtn').onclick=()=>{$('#leaveDialog').hidden=true};
-$('#leaveBtn').onclick=()=>{if(current){current.transcript=$('#transcript').value.trim();localStorage.loggDraft=JSON.stringify(current)} stopSpeech(true);clearInterval(tick);current=null;$('#leaveDialog').hidden=true;show('home');renderRecent()};
-$('#finishBtn').onclick=()=>{stopSpeech(true);clearInterval(tick);current.end=Date.now();current.transcript=$('#transcript').value.trim();current.sections=structure(current.transcript,current.output);let logs=getLogs();logs.push(current);saveLogs(logs.slice(-50));openLog(current.id)};
+// Clean Core navigation: one click handler + one edge-swipe, both call leaveMeeting().
+$('#backLive').addEventListener('click', leaveMeeting);
+let edgeGesture=null;
+const edgeZone=document.createElement('div');
+edgeZone.id='edgeBackZone';
+edgeZone.setAttribute('aria-hidden','true');
+document.body.appendChild(edgeZone);
+edgeZone.addEventListener('touchstart',e=>{
+  const t=e.touches[0];
+  edgeGesture=t?{x:t.clientX,y:t.clientY}:null;
+},{passive:true});
+edgeZone.addEventListener('touchend',e=>{
+  if(!edgeGesture)return;
+  const t=e.changedTouches[0],s=edgeGesture; edgeGesture=null;
+  if(t && t.clientX-s.x>=70 && Math.abs(t.clientY-s.y)<=80) leaveMeeting();
+},{passive:true});
+
 function structure(text,lang){
   // Smart Notes v1: local, zero-cost classification. Keeps every utterance in Meeting Notes
   // while extracting likely decisions, actions and open questions into separate sections.
@@ -164,8 +173,8 @@ function structure(text,lang){
     notes:(text||'—')
   };
 }
-function openLog(id){let l=getLogs().find(x=>x.id===id);if(!l)return;current=l;$('#resultTitle').textContent=l.name;$('#resultMeta').textContent=`${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}`;let s=l.sections||structure(l.transcript,l.output);let defs=[['summary','summary'],['decisions','decisions'],['actions','actions'],['questions','questions'],['notes','notes']];$('#sections').innerHTML=defs.map(([k,label])=>`<div class="section-card"><h3>${t(label)}</h3><textarea data-key="${k}">${esc(s[k])}</textarea></div>`).join('');$$('#sections textarea').forEach(a=>a.oninput=()=>{current.sections[a.dataset.key]=a.value;let logs=getLogs(),i=logs.findIndex(x=>x.id===current.id);logs[i]=current;saveLogs(logs)});show('result')}
-$('#backHome').onclick=()=>{show('home');renderRecent()};
+function openLog(id){let l=getLogs().find(x=>x.id===id);if(!l)return;current=l;$('#resultTitle').textContent=l.name;$('#resultMeta').textContent=`${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}`;let s=l.sections||structure(l.transcript,l.output);let defs=[['summary','summary'],['decisions','decisions'],['actions','actions'],['questions','questions'],['notes','notes']];$('#sections').innerHTML=defs.map(([k,label])=>`<div class="section-card"><h3>${t(label)}</h3><textarea data-key="${k}">${esc(s[k])}</textarea></div>`).join('');$$('#sections textarea').forEach(a=>a.oninput=()=>{current.sections[a.dataset.key]=a.value;let logs=getLogs(),i=logs.findIndex(x=>x.id===current.id);logs[i]=current;saveLogs(logs)});goTo('result')}
+$('#backHome').addEventListener('click',()=>{goTo('home');renderRecent()});
 function plain(){let s=current.sections;return `${current.name}\n${fmt(current.start)} · ${duration(current.end-current.start)}\n\n${t('summary')}\n${s.summary}\n\n${t('decisions')}\n${s.decisions}\n\n${t('actions')}\n${s.actions}\n\n${t('questions')}\n${s.questions}\n\n${t('notes')}\n${s.notes}`}
 $('#copyBtn').onclick=async()=>{await navigator.clipboard.writeText(plain());toast(t('copied'))};
 // Minimal store-only ZIP writer for a dependency-free .docx (OOXML package).
@@ -175,7 +184,7 @@ $('#wordBtn').onclick=()=>{let s=current.sections,body=p('LOGG',true,34)+p('MEET
 $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.4.0',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.5.0',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
@@ -191,22 +200,7 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
     if(refreshing) return; refreshing=true; window.location.reload();
   });
 }
-// v0.4.0 navigation hardening: capture phase + pointer events + edge swipe.
-// This runs before bubbling handlers and is independent of recorder state.
-function forceHome(){
-  try{ if(current){current.transcript=$('#transcript').value.trim();localStorage.loggDraft=JSON.stringify(current)} }catch{}
-  try{stopSpeech(true)}catch{}; try{clearInterval(tick)}catch{}; current=null;
-  $$('.view').forEach(v=>v.classList.remove('active')); $('#home').classList.add('active'); window.scrollTo(0,0); renderRecent();
-}
-if(backLive){
-  backLive.addEventListener('pointerup',e=>{e.preventDefault();e.stopImmediatePropagation();forceHome()},true);
-  backLive.addEventListener('touchend',e=>{e.preventDefault();e.stopImmediatePropagation();forceHome()},{capture:true,passive:false});
-}
-let navTouch=null;
-document.addEventListener('touchstart',e=>{const t=e.changedTouches&&e.changedTouches[0];if(t&&$('#live').classList.contains('active')&&t.clientX<=48)navTouch={x:t.clientX,y:t.clientY}}, {capture:true,passive:true});
-document.addEventListener('touchend',e=>{if(!navTouch)return;const t=e.changedTouches&&e.changedTouches[0],s=navTouch;navTouch=null;if(t&&(t.clientX-s.x)>=65&&Math.abs(t.clientY-s.y)<=90){e.preventDefault();forceHome()}}, {capture:true,passive:false});
-
 // Purge legacy PWA caches once so iPhone cannot keep executing stale 0.3.x JS.
 (async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-v0.3'))await caches.delete(k)}}catch{}})();
 
-applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.4.0 · '+navigator.userAgent.slice(0,55)),50);
+goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.5.0 · '+navigator.userAgent.slice(0,55)),50);
