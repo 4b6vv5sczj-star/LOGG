@@ -1,4 +1,4 @@
-# LOGG v0.7.0 — Intelligence & Polish
+# LOGG v0.7.1.0 — Intelligence & Polish
 
 Built directly from the verified v0.5.2 Home Navigation core freeze.
 
@@ -35,3 +35,9 @@ Important: Google speech behaviour was intentionally not changed because v0.5.2 
 - Better blocker/risk prioritisation in summaries.
 - Core Freeze preserved: navigation, recording, finish flow, archive and speech transport are unchanged.
 - Word export is intentionally not overhauled in this release.
+
+
+## v0.7.1 Lifestyle polish
+- Added the approved distant sailing-yacht lifestyle artwork below Saved meetings.
+- Subtle dark fade integrates the image into the home view.
+- No Intelligence, speech, navigation, meeting flow, archive, or export logic changed.

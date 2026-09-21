@@ -43,3 +43,9 @@ body[data-view="archive"] .topbar{display:none}
 .section-card textarea{font-size:14.5px;line-height:1.78;min-height:112px}
 .hero-copy{max-width:640px}.hero-copy p{font-size:13.5px;letter-spacing:.005em}.ghost-start{transition:padding .2s ease,border-color .2s ease}.ghost-start:active{padding-left:5px;padding-right:5px}
 @media(max-width:420px){.intelligence-note{align-items:flex-start;flex-direction:column;gap:4px}.intelligence-note b{text-align:left}.stationery{padding-left:20px;padding-right:20px}}
+
+/* v0.7.1 lifestyle polish — visual only; v0.7 intelligence/core frozen */
+.home-lifestyle{position:relative;margin:22px -24px -42px;height:210px;overflow:hidden;pointer-events:none;opacity:.82}
+.home-lifestyle:before{content:"";position:absolute;z-index:2;inset:0;background:linear-gradient(180deg,#121310 0%,transparent 24%,transparent 63%,#11120f 100%)}
+.home-lifestyle img{width:100%;height:100%;display:block;object-fit:cover;object-position:50% 57%;filter:saturate(.72) contrast(1.04) brightness(.78)}
+@media(max-width:420px){.home-lifestyle{height:220px;margin-top:20px}.home-lifestyle img{object-position:50% 55%}}
