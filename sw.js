@@ -1,4 +1,4 @@
-const CACHE = 'logg-v0.2.1-20260921';
+const CACHE = 'logg-v0.2.2-20260921';
 const CORE = ['./','./index.html','./styles.css','./app.js','./config.js','./manifest.webmanifest','./icons/icon-180.png','./icons/icon-192.png','./icons/icon-512.png'];
 
 self.addEventListener('install', event => {

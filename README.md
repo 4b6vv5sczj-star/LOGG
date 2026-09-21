@@ -35,3 +35,12 @@ The backend uses Application Default Credentials / the hosting service identity,
 
 ## v0.2.1 – iPhone/Safari cache fix
 The service worker now uses network-first loading, activates new builds immediately, clears old caches, bypasses HTTP cache when checking app files, and reloads once when a new service worker takes control. Static assets are versioned with query strings. This is intended to make GitHub Pages updates appear promptly on iPhone/PWA installs while retaining offline fallback.
+
+
+## v0.2.2
+- Active meeting now has a Back button with draft preservation.
+- Microphone permission is tested independently from Google backend configuration.
+- Clear status distinguishes microphone permission from Google Speech connectivity.
+- Cache/service worker bumped to v0.2.2.
+
+Google transcription still requires `window.LOGG_CONFIG.API_BASE` to point to the deployed secure backend. Credentials must never be placed in the GitHub Pages frontend.

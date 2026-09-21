@@ -12,25 +12,48 @@ function esc(s=''){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'
 $('#clearAll').onclick=()=>{if(confirm(ui==='sv'?'Rensa alla lokalt sparade LOGGar?':'Clear all locally saved LOGGs?')){saveLogs([]);renderRecent()}};
 $('#startBtn').onclick=()=>{let name=$('#meetingName').value.trim();if(!name||!$('#consent').checked){toast(t('nameRequired'));return}current={id:Date.now().toString(),name,start:Date.now(),end:null,output:$('#outputLang').value,transcript:'',sections:null};finalText='';$('#transcript').value='';$('#liveTitle').textContent=name;$('#liveDate').textContent=fmt(current.start);show('live');startTimer();startSpeech()};
 function startTimer(){clearInterval(tick);let f=()=>$('#timer').textContent=duration(Date.now()-current.start);f();tick=setInterval(f,1000)}
+function speechDetail(msg=''){const el=$('#speechDetail');if(el)el.textContent=msg}
 let recorder=null, stream=null, chunks=[], uploadBusy=false, chunkTimer=null;
 const MARINE_HINTS=['superyacht','sailing yacht','Baltic Yachts','fairing','prepreg','infusion','lamination','bulkhead','deckhouse','passerelle','tender garage','beach club','sea trial','commissioning','classification','class','flag state','HVAC','AV IT','joinery','outfitting','rigging','carbon mast','boom','standing rigging','running rigging','hydraulics','composites','teak deck'];
 async function startSpeech(){
   const base=(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,'');
-  if(!base){$('#speechStatus').textContent=ui==='sv'?'Google ej ansluten':'Google not connected';$('#speechNote').textContent=ui==='sv'?'Ange backend-adressen i config.js.':'Set the backend URL in config.js.';return}
+  $('#speechStatus').textContent=ui==='sv'?'Begär mikrofon…':'Requesting microphone…';
+  speechDetail('');
+  if(!navigator.mediaDevices?.getUserMedia){
+    $('#speechStatus').textContent=ui==='sv'?'Mikrofon stöds inte':'Microphone unsupported';
+    speechDetail(ui==='sv'?'Den här webbläsaren ger inte LOGG åtkomst till mikrofonen.':'This browser does not expose microphone access to LOGG.');
+    return;
+  }
   try{
     stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    $('#speechStatus').textContent=ui==='sv'?'Mikrofon klar':'Microphone ready';
+    if(!base){
+      speechDetail(ui==='sv'?'Mikrofonen fungerar. Google Speech är ännu inte ansluten — du kan skriva anteckningar manuellt tills backend-URL har lagts in i config.js.':'The microphone works. Google Speech is not connected yet — you can type notes manually until the backend URL is added to config.js.');
+      stream.getTracks().forEach(t=>t.stop()); stream=null;
+      return;
+    }
     const type=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm';
-    recorder=new MediaRecorder(stream,{mimeType:type}); chunks=[];
-    recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
-    recorder.onstop=async()=>{const blob=new Blob(chunks,{type});chunks=[];if(!paused&&current&&!current.end)await sendChunk(blob,base);if(!paused&&current&&!current.end)beginRecorder()};
-    beginRecorder(); $('#speechStatus').textContent=ui==='sv'?'Google · Lyssnar':'Google · Listening';
-  }catch(e){$('#speechStatus').textContent=ui==='sv'?'Mikrofon nekad':'Microphone unavailable'}
+    if(!window.MediaRecorder || !MediaRecorder.isTypeSupported(type)){throw new Error('MediaRecorder unsupported')}
+    beginRecorder();
+    $('#speechStatus').textContent=ui==='sv'?'Google · Lyssnar':'Google · Listening';
+    speechDetail(ui==='sv'?'Mikrofon klar · Google Speech ansluten':'Microphone ready · Google Speech connected');
+  }catch(e){
+    $('#speechStatus').textContent=ui==='sv'?'Mikrofon ej tillgänglig':'Microphone unavailable';
+    speechDetail(ui==='sv'?'Kontrollera Safari → Webbplatsinställningar → Mikrofon och tillåt åtkomst för LOGG.':'Check Safari → Website Settings → Microphone and allow access for LOGG.');
+  }
 }
 function beginRecorder(){if(!stream)return;const type=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm';recorder=new MediaRecorder(stream,{mimeType:type});chunks=[];recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.onstop=async()=>{const blob=new Blob(chunks,{type});chunks=[];if(!paused&&current&&!current.end)await sendChunk(blob,(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,''));if(!paused&&current&&!current.end)beginRecorder()};recorder.start();clearTimeout(chunkTimer);chunkTimer=setTimeout(()=>{if(recorder?.state==='recording')recorder.stop()},12000)}
 async function sendChunk(blob,base){if(uploadBusy||blob.size<1000)return;uploadBusy=true;try{let fd=new FormData();fd.append('audio',blob,'chunk.webm');fd.append('languages',JSON.stringify(['sv-SE','fi-FI','en-US','es-ES']));fd.append('phrases',JSON.stringify(MARINE_HINTS));let r=await fetch(base+'/api/transcribe',{method:'POST',body:fd});if(!r.ok)throw Error(await r.text());let j=await r.json();if(j.transcript){finalText+=(finalText?' ':'')+j.transcript.trim();$('#transcript').value=finalText;current.transcript=finalText;localStorage.loggDraft=JSON.stringify(current)}}catch(e){$('#speechStatus').textContent=ui==='sv'?'Anslutningsfel':'Connection issue'}finally{uploadBusy=false}}
 function stopSpeech(){clearTimeout(chunkTimer);if(recorder?.state==='recording')recorder.stop();stream?.getTracks().forEach(t=>t.stop());stream=null}
 $('#transcript').oninput=e=>{finalText=e.target.value+' ';if(current)current.transcript=e.target.value};
 $('#pauseBtn').onclick=()=>{paused=!paused;if(paused){stopSpeech();$('#pauseBtn').textContent=t('resume');$('#speechStatus').textContent=t('paused')}else{startSpeech();$('#pauseBtn').textContent=t('pause')}};
+$('#backLive').onclick=()=>{
+  const hasNotes=$('#transcript').value.trim().length>0;
+  const msg=ui==='sv'?'Lämna mötet? Utkastet sparas lokalt.':'Leave meeting? The draft will be saved locally.';
+  if(!confirm(msg))return;
+  if(current){current.transcript=$('#transcript').value.trim();localStorage.loggDraft=JSON.stringify(current)}
+  stopSpeech();clearInterval(tick);current=null;show('home');renderRecent();
+};
 $('#finishBtn').onclick=()=>{stopSpeech();clearInterval(tick);current.end=Date.now();current.transcript=$('#transcript').value.trim();current.sections=structure(current.transcript,current.output);let logs=getLogs();logs.push(current);saveLogs(logs.slice(-50));openLog(current.id)};
 function structure(text,lang){let lines=text.split(/(?<=[.!?])\s+|\n+/).map(s=>s.trim()).filter(Boolean);let actionRx=/(will|shall|need to|needs to|must|action|follow up|send|check|confirm|ska|måste|behöver|åtgärd|skicka|kolla|kontrollera|bekräfta)/i,decisionRx=/(decided|agreed|approved|decision|beslut|beslöt|överens|godkänd)/i,questionRx=/\?$|open question|öppen fråga|unclear|oklart/i;let actions=lines.filter(x=>actionRx.test(x)).slice(0,8),decisions=lines.filter(x=>decisionRx.test(x)).slice(0,6),questions=lines.filter(x=>questionRx.test(x)).slice(0,6);let summary=lines.slice(0,Math.min(4,lines.length)).join(' ');if(!summary)summary=lang==='sv'?'Inga anteckningar registrerades.':'No notes were captured.';return{summary,decisions:decisions.join('\n')||'—',actions:actions.map(x=>'☐ '+x).join('\n')||'—',questions:questions.join('\n')||'—',notes:text||'—'}}
 function openLog(id){let l=getLogs().find(x=>x.id===id);if(!l)return;current=l;$('#resultTitle').textContent=l.name;$('#resultMeta').textContent=`${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}`;let s=l.sections||structure(l.transcript,l.output);let defs=[['summary','summary'],['decisions','decisions'],['actions','actions'],['questions','questions'],['notes','notes']];$('#sections').innerHTML=defs.map(([k,label])=>`<div class="section-card"><h3>${t(label)}</h3><textarea data-key="${k}">${esc(s[k])}</textarea></div>`).join('');$$('#sections textarea').forEach(a=>a.oninput=()=>{current.sections[a.dataset.key]=a.value;let logs=getLogs(),i=logs.findIndex(x=>x.id===current.id);logs[i]=current;saveLogs(logs)});show('result')}
@@ -44,7 +67,7 @@ $('#wordBtn').onclick=()=>{let s=current.sections,body=p('LOGG',true,34)+p('MEET
 $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.2.1',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.2.2',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
