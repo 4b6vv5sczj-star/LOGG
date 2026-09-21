@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<meta name="theme-color" content="#F4F0E8" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="format-detection" content="telephone=no" />
+<link rel="apple-touch-icon" href="./icons/icon-180.png" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css" />
+<title>LOGG — Meetings on Course</title>
+</head>
+<body>
+<div class="app-shell">
+<header class="topbar"><div><div class="brand">LOGG</div><div class="tagline">MEETINGS ON COURSE</div></div><button class="lang" id="uiLang">SV</button></header>
+<main>
+<section id="home" class="view active">
+<div class="hero"><div class="eyebrow" data-i18n="private">PRIVATE BY DESIGN · AUDIO IS NOT SAVED</div><h1 data-i18n="hero">Turn the meeting into what happens next.</h1><p data-i18n="subhero">Live notes, decisions and actions — built for multilingual teams.</p></div>
+<div class="card new-card"><label data-i18n="meetingName">Meeting name</label><input id="meetingName" maxlength="80" placeholder="e.g. Project Aurora — Deck coordination" />
+<div class="grid2"><div><label data-i18n="outputLanguage">Output language</label><select id="outputLang"><option value="en">English</option><option value="sv">Svenska</option></select></div><div><label data-i18n="listening">Listening</label><div class="pill">AUTO · SV · FI · EN · ES</div></div></div>
+<label class="check"><input type="checkbox" id="consent"><span data-i18n="consent">I have informed participants that LOGG is listening to create notes and does not save an audio recording.</span></label>
+<button id="startBtn" class="primary" data-i18n="start">Start LOGG</button><p id="supportNote" class="micro"></p></div>
+<div class="section-title"><span data-i18n="recent">Recent LOGGs</span><button id="clearAll" class="text-btn" data-i18n="clear">Clear</button></div><div id="recentList" class="recent-list"></div>
+</section>
+<section id="live" class="view">
+<div class="live-top"><div class="eyebrow" data-i18n="listeningNow">LISTENING · AUDIO IS NOT SAVED</div><h2 id="liveTitle"></h2><div id="liveMeta" class="meta"></div></div>
+<div class="waterline"><span></span></div><div class="timer" id="timer">00:00</div>
+<div class="transcript-card"><div class="card-head"><span data-i18n="liveNotes">Live notes</span><span class="status-dot"><i></i> <b id="speechStatus">Ready</b></span></div><textarea id="transcript" data-i18n-placeholder="transcriptPlaceholder" placeholder="Speech will appear here. You can also type or correct text during the meeting."></textarea></div>
+<div class="live-actions"><button id="pauseBtn" class="secondary" data-i18n="pause">Pause</button><button id="finishBtn" class="primary dark" data-i18n="finish">Finish LOGG</button></div></section>
+<section id="result" class="view"><div class="result-head"><button id="backHome" class="back">←</button><div><div class="eyebrow" data-i18n="completed">COMPLETED LOGG</div><h2 id="resultTitle"></h2><div id="resultMeta" class="meta"></div></div></div>
+<div class="result-actions"><button id="copyBtn" class="secondary" data-i18n="copy">Copy</button><button id="wordBtn" class="primary" data-i18n="word">Export Word</button></div>
+<div id="sections"></div></section>
+</main></div><div id="toast" class="toast"></div><script src="./app.js"></script></body></html>
