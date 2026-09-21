@@ -123,7 +123,7 @@ $('#wordBtn').onclick=()=>{let s=current.sections,body=p('LOGG',true,34)+p('MEET
 $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.3.1',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.3.2',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
@@ -139,4 +139,4 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
     if(refreshing) return; refreshing=true; window.location.reload();
   });
 }
-applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.3.1 · '+navigator.userAgent.slice(0,55)),50);
+applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.3.2 · '+navigator.userAgent.slice(0,55)),50);
