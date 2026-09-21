@@ -1,2 +1,5 @@
-// GitHub Pages frontend configuration. Never put Google credentials here.
-window.LOGG_CONFIG = { API_BASE: "" }; // e.g. https://your-logg-backend.run.app
+// LOGG frontend configuration. Never put Google credentials here.
+window.LOGG_CONFIG = {
+  API_BASE: "https://logg-speech-273392986972.europe-west1.run.app",
+  BUILD: "0.3.0"
+};

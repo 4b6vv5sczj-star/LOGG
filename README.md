@@ -44,3 +44,9 @@ The service worker now uses network-first loading, activates new builds immediat
 - Cache/service worker bumped to v0.2.2.
 
 Google transcription still requires `window.LOGG_CONFIG.API_BASE` to point to the deployed secure backend. Credentials must never be placed in the GitHub Pages frontend.
+
+
+## v0.3.0 deployment
+Frontend config points to the Cloud Run service already created for LOGG. Upload all frontend files to the GitHub Pages repository. The backend folder is deployed by Cloud Run from `/backend/Dockerfile`. Set Cloud Run runtime service account to `LOGG Speech`. No JSON credentials belong in this repository.
+
+On iPhone, LOGG chooses the first MediaRecorder format Safari supports (MP4/AAC on Safari where available; WebM/Opus elsewhere). Google Speech-to-Text V2 auto-decoding supports both MP4/AAC and WebM/Opus.

@@ -1,52 +1,6 @@
-const CACHE = 'logg-v0.2.2-20260921';
-const CORE = ['./','./index.html','./styles.css','./app.js','./config.js','./manifest.webmanifest','./icons/icon-180.png','./icons/icon-192.png','./icons/icon-512.png'];
-
-self.addEventListener('install', event => {
-  self.skipWaiting();
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)));
-});
-
-self.addEventListener('activate', event => {
-  event.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)));
-    await self.clients.claim();
-  })());
-});
-
-self.addEventListener('message', event => {
-  if (event.data === 'SKIP_WAITING') self.skipWaiting();
-});
-
-self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
-  const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) return;
-
-  // HTML/navigation: always ask the network first so GitHub Pages updates show immediately.
-  if (event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
-    event.respondWith((async () => {
-      try {
-        const fresh = await fetch(event.request, {cache:'no-store'});
-        const cache = await caches.open(CACHE);
-        cache.put(event.request, fresh.clone());
-        return fresh;
-      } catch (_) {
-        return (await caches.match(event.request)) || (await caches.match('./index.html'));
-      }
-    })());
-    return;
-  }
-
-  // App files: network first, cached copy only as offline fallback.
-  event.respondWith((async () => {
-    try {
-      const fresh = await fetch(event.request, {cache:'no-store'});
-      const cache = await caches.open(CACHE);
-      cache.put(event.request, fresh.clone());
-      return fresh;
-    } catch (_) {
-      return caches.match(event.request);
-    }
-  })());
-});
+const CACHE='logg-v0.3.0-20260921';
+const CORE=['./','./index.html','./styles.css?v=0.3.0','./app.js?v=0.3.0','./config.js?v=0.3.0','./manifest.webmanifest?v=0.3.0','./icons/icon-180.png','./icons/icon-192.png','./icons/icon-512.png'];
+self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)))});
+self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const k of await caches.keys())if(k!==CACHE)await caches.delete(k);await self.clients.claim()})()));
+self.addEventListener('message',e=>{if(e.data==='SKIP_WAITING')self.skipWaiting()});
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==self.location.origin)return;e.respondWith((async()=>{try{const r=await fetch(e.request,{cache:'no-store'});if(r.ok){const c=await caches.open(CACHE);c.put(e.request,r.clone())}return r}catch{return (await caches.match(e.request))||(e.request.mode==='navigate'?caches.match('./index.html'):Response.error())}})())});
