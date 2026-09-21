@@ -12,9 +12,9 @@ const region = process.env.GOOGLE_SPEECH_REGION || 'eu';
 const project = process.env.GOOGLE_CLOUD_PROJECT;
 const client = new speechV2.SpeechClient({apiEndpoint:`${region}-speech.googleapis.com`});
 
-app.get('/',(_,res)=>res.json({ok:true,service:'LOGG Speech',version:'0.3.2'}));
+app.get('/',(_,res)=>res.json({ok:true,service:'LOGG Speech',version:'0.4.0'}));
 app.get('/health',(_,res)=>res.json({
-  ok:true, service:'LOGG Speech', model:'chirp_3', region, version:'0.3.2',
+  ok:true, service:'LOGG Speech', model:'chirp_3', region, version:'0.4.0',
   projectConfigured:Boolean(project), endpoint:`${region}-speech.googleapis.com`
 }));
 
@@ -43,14 +43,14 @@ app.post('/api/transcribe', upload.single('audio'), async(req,res)=>{
       .map(r=>r.alternatives?.[0]?.transcript||'')
       .join(' ').trim();
     const detectedLanguages=[...new Set((response.results||[]).map(r=>r.languageCode).filter(Boolean))];
-    res.json({transcript, detectedLanguages, version:'0.3.2'});
+    res.json({transcript, detectedLanguages, version:'0.4.0'});
   } catch(e) {
     console.error('STT ERROR', e);
     const code=e?.code ?? 'unknown';
     const details=e?.details || e?.message || 'Transcription failed';
-    res.status(500).json({error:String(details), code:String(code), region, version:'0.3.2'});
+    res.status(500).json({error:String(details), code:String(code), region, version:'0.4.0'});
   }
 });
 
 const port=process.env.PORT||8080;
-app.listen(port,()=>console.log(`LOGG backend v0.3.4 on ${port}; STT=${region}-speech.googleapis.com`));
+app.listen(port,()=>console.log(`LOGG backend v0.4.0 on ${port}; STT=${region}-speech.googleapis.com`));

@@ -129,7 +129,41 @@ document.addEventListener('touchend',e=>{const t=e.changedTouches[0]; if(t) swip
 $('#stayBtn').onclick=()=>{$('#leaveDialog').hidden=true};
 $('#leaveBtn').onclick=()=>{if(current){current.transcript=$('#transcript').value.trim();localStorage.loggDraft=JSON.stringify(current)} stopSpeech(true);clearInterval(tick);current=null;$('#leaveDialog').hidden=true;show('home');renderRecent()};
 $('#finishBtn').onclick=()=>{stopSpeech(true);clearInterval(tick);current.end=Date.now();current.transcript=$('#transcript').value.trim();current.sections=structure(current.transcript,current.output);let logs=getLogs();logs.push(current);saveLogs(logs.slice(-50));openLog(current.id)};
-function structure(text,lang){let lines=text.split(/(?<=[.!?])\s+|\n+/).map(s=>s.trim()).filter(Boolean);let actionRx=/(will|shall|need to|needs to|must|action|follow up|send|check|confirm|ska|måste|behöver|åtgärd|skicka|kolla|kontrollera|bekräfta)/i,decisionRx=/(decided|agreed|approved|decision|beslut|beslöt|överens|godkänd)/i,questionRx=/\?$|open question|öppen fråga|unclear|oklart/i;let actions=lines.filter(x=>actionRx.test(x)).slice(0,8),decisions=lines.filter(x=>decisionRx.test(x)).slice(0,6),questions=lines.filter(x=>questionRx.test(x)).slice(0,6);let summary=lines.slice(0,Math.min(4,lines.length)).join(' ');if(!summary)summary=lang==='sv'?'Inga anteckningar registrerades.':'No notes were captured.';return{summary,decisions:decisions.join('\n')||'—',actions:actions.map(x=>'☐ '+x).join('\n')||'—',questions:questions.join('\n')||'—',notes:text||'—'}}
+function structure(text,lang){
+  // Smart Notes v1: local, zero-cost classification. Keeps every utterance in Meeting Notes
+  // while extracting likely decisions, actions and open questions into separate sections.
+  const sentences=(text||'').replace(/\s+/g,' ').split(/(?<=[.!?])\s+|\n+/).map(x=>x.trim()).filter(Boolean);
+  const norm=x=>x.toLocaleLowerCase(lang==='sv'?'sv-FI':'en-GB');
+  const actionStrong=/(\b(jag|vi|du|han|hon|de|i|we|you|he|she|they)\b.{0,45}\b(ska|skall|måste|behöver|kommer att|tar|fixar|skickar|kollar|kontrollerar|bekräftar|bokar|uppdaterar|följer upp|will|shall|must|need to|needs to|going to|send|check|confirm|book|update|follow up)\b)|(\b(action|åtgärd|todo|to-do)\b)/i;
+  const actionWeak=/\b(bör|borde|kan vi|could we|should|needs? checking|behöver kollas|follow-up|uppföljning)\b/i;
+  const decisionRx=/\b(beslut|beslutat|beslöt|bestämde|bestämt|överens|godkänd|godkänt|vi kör|vi väljer|vi går vidare|decided|decision|agreed|approved|we will proceed|we chose|we choose|go ahead)\b/i;
+  const questionRx=/(\?$)|\b(öppen fråga|oklart|återstår att avgöra|behöver avgöras|vem ska|när ska|hur ska|open question|unclear|to be decided|who will|when will|how will)\b/i;
+  const deadlineRx=/\b(idag|imorgon|denna vecka|nästa vecka|måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|today|tomorrow|this week|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}[.\/-]\d{1,2}(?:[.\/-]\d{2,4})?)\b/i;
+  const ownerRx=/^(?:action[:\s-]*)?(jag|vi|du|han|hon|de|i|we|you|he|she|they|[A-ZÅÄÖ][a-zåäöé-]{2,20})\b/i;
+  const uniq=[]; const seen=new Set();
+  for(const x of sentences){const k=norm(x).replace(/[^a-z0-9åäö]+/g,' ').trim();if(k&&!seen.has(k)){seen.add(k);uniq.push(x)}}
+  const decisions=[], actions=[], questions=[], body=[];
+  for(const x of uniq){
+    if(questionRx.test(x)){questions.push(x);continue}
+    if(decisionRx.test(x)){decisions.push(x);continue}
+    if(actionStrong.test(x)||actionWeak.test(x)){
+      const owner=(x.match(ownerRx)||[])[1]||''; const deadline=(x.match(deadlineRx)||[])[0]||'';
+      const uncertain=!actionStrong.test(x);
+      let meta=[]; if(owner)meta.push((lang==='sv'?'Ansvar: ':'Owner: ')+owner); if(deadline)meta.push((lang==='sv'?'Tid: ':'Due: ')+deadline); if(uncertain)meta.push(lang==='sv'?'bekräfta':'confirm');
+      actions.push('☐ '+x+(meta.length?'  ['+meta.join(' · ')+']':'')); continue;
+    }
+    body.push(x);
+  }
+  const summaryPool=body.length?body:uniq.filter(x=>!decisions.includes(x)&&!questions.includes(x));
+  const summary=summaryPool.slice(0,5).join(' ') || (lang==='sv'?'Inga anteckningar registrerades.':'No notes were captured.');
+  return{
+    summary,
+    decisions:decisions.slice(0,10).join('\n')||'—',
+    actions:actions.slice(0,15).join('\n')||'—',
+    questions:questions.slice(0,10).join('\n')||'—',
+    notes:(text||'—')
+  };
+}
 function openLog(id){let l=getLogs().find(x=>x.id===id);if(!l)return;current=l;$('#resultTitle').textContent=l.name;$('#resultMeta').textContent=`${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}`;let s=l.sections||structure(l.transcript,l.output);let defs=[['summary','summary'],['decisions','decisions'],['actions','actions'],['questions','questions'],['notes','notes']];$('#sections').innerHTML=defs.map(([k,label])=>`<div class="section-card"><h3>${t(label)}</h3><textarea data-key="${k}">${esc(s[k])}</textarea></div>`).join('');$$('#sections textarea').forEach(a=>a.oninput=()=>{current.sections[a.dataset.key]=a.value;let logs=getLogs(),i=logs.findIndex(x=>x.id===current.id);logs[i]=current;saveLogs(logs)});show('result')}
 $('#backHome').onclick=()=>{show('home');renderRecent()};
 function plain(){let s=current.sections;return `${current.name}\n${fmt(current.start)} · ${duration(current.end-current.start)}\n\n${t('summary')}\n${s.summary}\n\n${t('decisions')}\n${s.decisions}\n\n${t('actions')}\n${s.actions}\n\n${t('questions')}\n${s.questions}\n\n${t('notes')}\n${s.notes}`}
@@ -141,7 +175,7 @@ $('#wordBtn').onclick=()=>{let s=current.sections,body=p('LOGG',true,34)+p('MEET
 $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.3.2',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.4.0',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
@@ -157,4 +191,22 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
     if(refreshing) return; refreshing=true; window.location.reload();
   });
 }
-applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.3.4 · '+navigator.userAgent.slice(0,55)),50);
+// v0.4.0 navigation hardening: capture phase + pointer events + edge swipe.
+// This runs before bubbling handlers and is independent of recorder state.
+function forceHome(){
+  try{ if(current){current.transcript=$('#transcript').value.trim();localStorage.loggDraft=JSON.stringify(current)} }catch{}
+  try{stopSpeech(true)}catch{}; try{clearInterval(tick)}catch{}; current=null;
+  $$('.view').forEach(v=>v.classList.remove('active')); $('#home').classList.add('active'); window.scrollTo(0,0); renderRecent();
+}
+if(backLive){
+  backLive.addEventListener('pointerup',e=>{e.preventDefault();e.stopImmediatePropagation();forceHome()},true);
+  backLive.addEventListener('touchend',e=>{e.preventDefault();e.stopImmediatePropagation();forceHome()},{capture:true,passive:false});
+}
+let navTouch=null;
+document.addEventListener('touchstart',e=>{const t=e.changedTouches&&e.changedTouches[0];if(t&&$('#live').classList.contains('active')&&t.clientX<=48)navTouch={x:t.clientX,y:t.clientY}}, {capture:true,passive:true});
+document.addEventListener('touchend',e=>{if(!navTouch)return;const t=e.changedTouches&&e.changedTouches[0],s=navTouch;navTouch=null;if(t&&(t.clientX-s.x)>=65&&Math.abs(t.clientY-s.y)<=90){e.preventDefault();forceHome()}}, {capture:true,passive:false});
+
+// Purge legacy PWA caches once so iPhone cannot keep executing stale 0.3.x JS.
+(async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-v0.3'))await caches.delete(k)}}catch{}})();
+
+applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.4.0 · '+navigator.userAgent.slice(0,55)),50);
