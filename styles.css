@@ -17,3 +17,11 @@ body[data-view="live"] .topbar,body[data-view="result"] .topbar{display:none}
 #backLive,#backHome{position:relative;z-index:50;width:56px;height:56px;margin:-8px 0 0 -10px;padding:0;flex:0 0 56px}
 #edgeBackZone{position:fixed;z-index:45;left:0;top:0;bottom:0;width:24px;display:none;touch-action:pan-y}
 body[data-view="live"] #edgeBackZone{display:block}
+
+/* v0.5.2 Home Navigation */
+.archive-link{display:block;margin:14px auto 0;border:0;background:transparent;color:#ddd4c5;font:600 9px Manrope;letter-spacing:.12em;text-transform:uppercase;padding:10px 14px;-webkit-tap-highlight-color:transparent}
+.archive-link:after{content:"  ·  →";color:#b89b67}
+.archive .paper-mark{margin-bottom:0}.archive-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:22px}.archive-head span{font-size:8px;letter-spacing:.18em;color:var(--champ);font-weight:700}.archive-head h2{font-size:30px;letter-spacing:-.04em;margin:6px 0 0}.archive-clear{border:0;background:transparent;color:var(--taupe);font:600 9px Manrope;letter-spacing:.1em;text-transform:uppercase;padding:12px}.archive .recent-item{color:var(--ink);margin:0;border-color:var(--line);padding:18px 4px}.archive .recent-meta{color:var(--taupe)}.archive .empty{color:var(--taupe);padding-left:4px}
+#edgeBackZone{display:none!important}
+body[data-view="archive"] .topbar{display:none}
+.view{opacity:0}.view.active{display:block;animation:loggViewIn .24s ease-out forwards}@keyframes loggViewIn{from{opacity:0;transform:translateX(6px)}to{opacity:1;transform:none}}

@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-const I={en:{heroSub:'Speech becomes clarity. Audio never becomes a recording.',newLogg:'Start Meeting LOGG',meeting:'MEETING',started:'STARTED',privacy:'Audio is processed live for transcription and is not retained by LOGG.',meetingName:'Meeting name',outputLanguage:'Output language',listening:'Listening',consent:'I have informed participants that LOGG listens to create notes. LOGG does not retain an audio recording.',start:'Begin LOGG',recent:'Recent LOGGs',clear:'Clear',listeningNow:'LISTENING · AUDIO IS NOT SAVED',liveNotes:'Live notes',pause:'Pause',resume:'Resume',finish:'Finish LOGG',completed:'COMPLETED LOGG',copy:'Copy',word:'Export Word',transcriptPlaceholder:'Your live transcript will appear here. You can type or correct text at any time.',empty:'No LOGGs yet.',nameRequired:'Add a meeting name and confirm participant notice.',copied:'Copied',summary:'Summary',decisions:'Decisions',actions:'Actions',questions:'Open Questions',notes:'Meeting Notes',ready:'Ready',unsupported:'Speech recognition is not available in this browser. You can still type notes live.',paused:'Paused',listeningStatus:'Listening'},sv:{heroSub:'Tal blir tydlighet. Ljudet blir aldrig en inspelning.',newLogg:'Starta mötes-LOGG',meeting:'MÖTE',started:'STARTAD',privacy:'Ljud bearbetas live för transkribering och sparas inte av LOGG.',meetingName:'Mötesnamn',outputLanguage:'Output-språk',listening:'Lyssning',consent:'Jag har informerat deltagarna om att LOGG lyssnar för att skapa anteckningar. LOGG sparar ingen ljudinspelning.',start:'Starta LOGG',recent:'Senaste LOGGar',clear:'Rensa',listeningNow:'LYSSNAR · LJUD SPARAS INTE',liveNotes:'Live-anteckningar',pause:'Pausa',resume:'Fortsätt',finish:'Avsluta LOGG',completed:'AVSLUTAD LOGG',copy:'Kopiera',word:'Exportera Word',transcriptPlaceholder:'Din live-transkribering visas här. Du kan skriva eller korrigera text när som helst.',empty:'Inga LOGGar ännu.',nameRequired:'Fyll i mötesnamn och bekräfta att deltagarna informerats.',copied:'Kopierat',summary:'Sammanfattning',decisions:'Beslut',actions:'Åtgärder',questions:'Öppna frågor',notes:'Mötesanteckningar',ready:'Klar',unsupported:'Taligenkänning stöds inte i denna webbläsare. Du kan fortfarande skriva anteckningar live.',paused:'Pausad',listeningStatus:'Lyssnar'}};
+const I={en:{heroSub:'Speech becomes clarity. Audio never becomes a recording.',newLogg:'Start Meeting LOGG',saved:'Saved meetings',savedKicker:'ARCHIVE',meeting:'MEETING',started:'STARTED',privacy:'Audio is processed live for transcription and is not retained by LOGG.',meetingName:'Meeting name',outputLanguage:'Output language',listening:'Listening',consent:'I have informed participants that LOGG listens to create notes. LOGG does not retain an audio recording.',start:'Begin LOGG',recent:'Recent LOGGs',clear:'Clear',listeningNow:'LISTENING · AUDIO IS NOT SAVED',liveNotes:'Live notes',pause:'Pause',resume:'Resume',finish:'Finish LOGG',completed:'COMPLETED LOGG',copy:'Copy',word:'Export Word',transcriptPlaceholder:'Your live transcript will appear here. You can type or correct text at any time.',empty:'No LOGGs yet.',nameRequired:'Add a meeting name and confirm participant notice.',copied:'Copied',summary:'Summary',decisions:'Decisions',actions:'Actions',questions:'Open Questions',notes:'Meeting Notes',ready:'Ready',unsupported:'Speech recognition is not available in this browser. You can still type notes live.',paused:'Paused',listeningStatus:'Listening'},sv:{heroSub:'Tal blir tydlighet. Ljudet blir aldrig en inspelning.',newLogg:'Starta mötes-LOGG',saved:'Sparade möten',savedKicker:'ARKIV',meeting:'MÖTE',started:'STARTAD',privacy:'Ljud bearbetas live för transkribering och sparas inte av LOGG.',meetingName:'Mötesnamn',outputLanguage:'Output-språk',listening:'Lyssning',consent:'Jag har informerat deltagarna om att LOGG lyssnar för att skapa anteckningar. LOGG sparar ingen ljudinspelning.',start:'Starta LOGG',recent:'Senaste LOGGar',clear:'Rensa',listeningNow:'LYSSNAR · LJUD SPARAS INTE',liveNotes:'Live-anteckningar',pause:'Pausa',resume:'Fortsätt',finish:'Avsluta LOGG',completed:'AVSLUTAD LOGG',copy:'Kopiera',word:'Exportera Word',transcriptPlaceholder:'Din live-transkribering visas här. Du kan skriva eller korrigera text när som helst.',empty:'Inga LOGGar ännu.',nameRequired:'Fyll i mötesnamn och bekräfta att deltagarna informerats.',copied:'Kopierat',summary:'Sammanfattning',decisions:'Beslut',actions:'Åtgärder',questions:'Öppna frågor',notes:'Mötesanteckningar',ready:'Klar',unsupported:'Taligenkänning stöds inte i denna webbläsare. Du kan fortfarande skriva anteckningar live.',paused:'Pausad',listeningStatus:'Lyssnar'}};
 let ui=localStorage.loggUi||'en', current=null, tick=null, recognition=null, paused=false, finalText='';
 function t(k){return I[ui][k]||k} function toast(x){$('#toast').textContent=x;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),1800)}
 function applyLang(){document.documentElement.lang=ui;$$('[data-i18n]').forEach(e=>e.textContent=t(e.dataset.i18n));$$('[data-i18n-placeholder]').forEach(e=>e.placeholder=t(e.dataset.i18nPlaceholder));$('#uiLang').textContent=ui==='en'?'SV':'EN';renderRecent()}
@@ -128,22 +128,33 @@ function leaveMeeting(){
   renderRecent();
 }
 
-// Clean Core navigation: one click handler + one edge-swipe, both call leaveMeeting().
+// v0.5.2 Home Navigation: every back action returns to the lifestyle home.
 $('#backLive').addEventListener('click', leaveMeeting);
-let edgeGesture=null;
-const edgeZone=document.createElement('div');
-edgeZone.id='edgeBackZone';
-edgeZone.setAttribute('aria-hidden','true');
-document.body.appendChild(edgeZone);
-edgeZone.addEventListener('touchstart',e=>{
-  const t=e.touches[0];
-  edgeGesture=t?{x:t.clientX,y:t.clientY}:null;
-},{passive:true});
-edgeZone.addEventListener('touchend',e=>{
-  if(!edgeGesture)return;
-  const t=e.changedTouches[0],s=edgeGesture; edgeGesture=null;
-  if(t && t.clientX-s.x>=70 && Math.abs(t.clientY-s.y)<=80) leaveMeeting();
-},{passive:true});
+function goHome(){ goTo('home'); $('#startSheet').classList.add('hidden'); renderRecent(); }
+$('#backHome').addEventListener('click',goHome);
+$('#backArchive').addEventListener('click',goHome);
+$('#openArchive').addEventListener('click',()=>{renderRecent();goTo('archive')});
+
+// Swipe right on the document itself (not Safari's reserved screen edge).
+// Interactive controls/text fields are excluded so normal editing and scrolling stay reliable.
+let swipeStart=null;
+function installSwipeBack(selector,handler){
+  const el=$(selector); if(!el)return;
+  el.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1 || e.target.closest('button,input,select,textarea,a')){swipeStart=null;return;}
+    const t=e.touches[0]; swipeStart={x:t.clientX,y:t.clientY,time:Date.now()};
+  },{passive:true});
+  el.addEventListener('touchend',e=>{
+    if(!swipeStart)return;
+    const t=e.changedTouches[0],s=swipeStart; swipeStart=null;
+    if(!t)return;
+    const dx=t.clientX-s.x,dy=t.clientY-s.y,dt=Date.now()-s.time;
+    if(dx>=90 && Math.abs(dx)>Math.abs(dy)*1.5 && dt<900) handler();
+  },{passive:true});
+}
+installSwipeBack('#live .stationery',leaveMeeting);
+installSwipeBack('#result .stationery',goHome);
+installSwipeBack('#archive .stationery',goHome);
 
 async function finishMeeting(){
   if(!current || current.end) return;
@@ -219,7 +230,6 @@ function structure(text,lang){
   };
 }
 function openLog(id){let l=getLogs().find(x=>x.id===id);if(!l)return;current=l;$('#resultTitle').textContent=l.name;$('#resultMeta').textContent=`${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}`;let s=l.sections||structure(l.transcript,l.output);let defs=[['summary','summary'],['decisions','decisions'],['actions','actions'],['questions','questions'],['notes','notes']];$('#sections').innerHTML=defs.map(([k,label])=>`<div class="section-card"><h3>${t(label)}</h3><textarea data-key="${k}">${esc(s[k])}</textarea></div>`).join('');$$('#sections textarea').forEach(a=>a.oninput=()=>{current.sections[a.dataset.key]=a.value;let logs=getLogs(),i=logs.findIndex(x=>x.id===current.id);logs[i]=current;saveLogs(logs)});goTo('result')}
-$('#backHome').addEventListener('click',()=>{goTo('home');renderRecent()});
 function plain(){let s=current.sections;return `${current.name}\n${fmt(current.start)} · ${duration(current.end-current.start)}\n\n${t('summary')}\n${s.summary}\n\n${t('decisions')}\n${s.decisions}\n\n${t('actions')}\n${s.actions}\n\n${t('questions')}\n${s.questions}\n\n${t('notes')}\n${s.notes}`}
 $('#copyBtn').onclick=async()=>{await navigator.clipboard.writeText(plain());toast(t('copied'))};
 // Minimal store-only ZIP writer for a dependency-free .docx (OOXML package).
@@ -229,7 +239,7 @@ $('#wordBtn').onclick=()=>{let s=current.sections,body=p('LOGG',true,34)+p('MEET
 $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.5.0',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.5.2',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
@@ -248,4 +258,4 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
 // Purge legacy PWA caches once so iPhone cannot keep executing stale 0.3.x JS.
 (async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-v0.3'))await caches.delete(k)}}catch{}})();
 
-goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.5.1 · '+navigator.userAgent.slice(0,55)),50);
+goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.5.2 · '+navigator.userAgent.slice(0,55)),50);

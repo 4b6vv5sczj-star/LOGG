@@ -1,20 +1,8 @@
-# LOGG v0.5.1 — Clean Core
+# LOGG v0.5.2 — Home Navigation
 
-Architecture cleanup release.
-
-- Fixes the actual iPhone Back issue: the fixed global topbar was sitting above the meeting Back button and intercepting touches.
-- One internal navigation function (`goTo`) and one meeting exit path (`leaveMeeting`).
-- One click handler for Back and one isolated left-edge swipe zone; no browser history, pointerup duplicates, capture-phase handlers, or dialogs.
-- Topbar cannot intercept meeting/result controls.
-- Simplified network-first service worker and clean v0.5 cache.
-- Google Chirp 3 transcription path preserved.
-- Smart Notes v1 preserved (Summary, Decisions, Actions, Open Questions, Meeting Notes).
-
-Deploy the complete folder to the GitHub repo. Cloud Run will rebuild the backend, but the Speech implementation itself is unchanged.
-
-
-## v0.5.1 Stabilization
-- Restored the missing Finish LOGG event handler.
-- Finish now flushes the final MediaRecorder segment and waits for its transcription before saving.
-- Meeting is then structured with Smart Notes, saved locally, and opened in the result view.
-- Back/navigation architecture from v0.5 is unchanged.
+- Back from live meeting, result, and archive always returns to the lifestyle home view.
+- Saved meetings moved out of the home feed into a separate discreet Archive view.
+- Swipe-right rebuilt on the document surface instead of the iOS/Safari reserved screen edge.
+- Swipe excludes buttons, inputs, selects and textareas to protect normal editing/scrolling.
+- Speech, Finish LOGG and Smart Notes logic otherwise unchanged from v0.5.1.
+- Cache/service-worker references bumped consistently to v0.5.2.
