@@ -1,4 +1,4 @@
-const CACHE='logg-v0.3.2-20260921';
+const CACHE='logg-v0.3.3-20260921';
 const CORE=['./','./index.html','./styles.css?v=0.3.2','./app.js?v=0.3.2','./config.js?v=0.3.2','./manifest.webmanifest?v=0.3.2','./icons/icon-180.png','./icons/icon-192.png','./icons/icon-512.png'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)))});
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const k of await caches.keys())if(k!==CACHE)await caches.delete(k);await self.clients.claim()})()));

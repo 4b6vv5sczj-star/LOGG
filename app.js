@@ -14,7 +14,8 @@ $('#startBtn').onclick=()=>{let name=$('#meetingName').value.trim();if(!name||!$
 function startTimer(){clearInterval(tick);let f=()=>$('#timer').textContent=duration(Date.now()-current.start);f();tick=setInterval(f,1000)}
 function speechDetail(msg=''){const el=$('#speechDetail');if(el)el.textContent=msg}
 let recorder=null, stream=null, chunks=[], uploadBusy=false, chunkTimer=null, audioCtx=null, analyser=null, meterRAF=null, stopping=false, chunkBytes=0, chunkCount=0;
-function diag(msg){const el=$('#diagnostics');if(el){const stamp=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});el.textContent=stamp+' · '+msg+'\n'+el.textContent.split('\n').slice(0,5).join('\n')}}
+const DEBUG=new URLSearchParams(location.search).get('debug')==='1'; if(DEBUG) document.documentElement.classList.add('debug-mode');
+function diag(msg){const el=$('#diagnostics');if(DEBUG&&el){const stamp=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});el.textContent=stamp+' · '+msg+'\n'+el.textContent.split('\n').slice(0,5).join('\n')}}
 const MARINE_HINTS=['superyacht','sailing yacht','Baltic Yachts','fairing','prepreg','infusion','lamination','bulkhead','deckhouse','passerelle','tender garage','beach club','sea trial','commissioning','classification','class','flag state','HVAC','AV IT','joinery','outfitting','rigging','carbon mast','boom','standing rigging','running rigging','hydraulics','composites','teak deck'];
 async function checkBackend(base){
   const r=await fetch(base+'/health',{cache:'no-store'});
@@ -53,7 +54,7 @@ async function startSpeech(){
     const type=chooseMimeType();
     if(!type) throw new Error('No supported recording format');
     diag('FORMAT '+type); beginRecorder(type);
-    $('#speechStatus').textContent=ui==='sv'?'MIC ✓ · GOOGLE ✓ · LYSSNAR':'MIC ✓ · GOOGLE ✓ · LISTENING';
+    $('#speechStatus').textContent=ui==='sv'?'Lyssnar':'Listening';
     speechDetail((ui==='sv'?'Google Chirp 3 · Auto språk · ':'Google Chirp 3 · Auto language · ')+type.replace('audio/','').toUpperCase());
   }catch(e){
     console.error(e); $('#speechStatus').textContent=ui==='sv'?'Mikrofon ej tillgänglig':'Microphone unavailable';
@@ -96,7 +97,7 @@ async function sendChunk(blob,base,type){
     let r=await fetch(base+'/api/transcribe',{method:'POST',body:fd}); diag('GOOGLE HTTP '+r.status);
     if(!r.ok) throw Error(await r.text()); let j=await r.json();
     if(j.transcript){diag('TEXT ✓ '+j.transcript.length+' chars'); finalText=(finalText.trim()+' '+j.transcript.trim()).trim(); $('#transcript').value=finalText; current.transcript=finalText; localStorage.loggDraft=JSON.stringify(current); }
-    $('#speechStatus').textContent=ui==='sv'?'MIC ✓ · GOOGLE ✓ · LYSSNAR':'MIC ✓ · GOOGLE ✓ · LISTENING';
+    $('#speechStatus').textContent=ui==='sv'?'Lyssnar':'Listening';
   }catch(e){ console.error(e); diag('ERROR '+(e.message||e)); $('#speechStatus').textContent=ui==='sv'?'Google-fel':'Google error'; speechDetail(e.message||'Transcription failed'); }finally{uploadBusy=false}
 }
 function stopSpeech(discard=true){
@@ -106,8 +107,8 @@ function stopSpeech(discard=true){
 }
 $('#transcript').oninput=e=>{finalText=e.target.value+' ';if(current)current.transcript=e.target.value};
 $('#pauseBtn').onclick=()=>{paused=!paused;if(paused){stopSpeech(true);$('#pauseBtn').textContent=t('resume');$('#speechStatus').textContent=t('paused')}else{stopping=false;startSpeech();$('#pauseBtn').textContent=t('pause')}};
-function openLeaveDialog(e){if(e){e.preventDefault();e.stopPropagation()} diag('BACK ✓'); $('#leaveTitle').textContent=ui==='sv'?'Lämna mötet?':'Leave meeting?'; $('#leaveText').textContent=ui==='sv'?'Utkastet sparas lokalt.':'Your draft is saved locally.'; $('#stayBtn').textContent=ui==='sv'?'Fortsätt mötet':'Continue meeting'; $('#leaveBtn').textContent=ui==='sv'?'Spara utkast & lämna':'Save draft & leave'; $('#leaveDialog').hidden=false;}
-$('#backLive').addEventListener('click',openLeaveDialog); $('#backLive').addEventListener('touchend',openLeaveDialog,{passive:false});
+function leaveMeeting(){if(current){current.transcript=$('#transcript').value.trim();localStorage.loggDraft=JSON.stringify(current)} stopSpeech(true);clearInterval(tick);current=null;show('home');renderRecent()}
+$('#backLive').onclick=leaveMeeting;
 $('#stayBtn').onclick=()=>{$('#leaveDialog').hidden=true};
 $('#leaveBtn').onclick=()=>{if(current){current.transcript=$('#transcript').value.trim();localStorage.loggDraft=JSON.stringify(current)} stopSpeech(true);clearInterval(tick);current=null;$('#leaveDialog').hidden=true;show('home');renderRecent()};
 $('#finishBtn').onclick=()=>{stopSpeech(true);clearInterval(tick);current.end=Date.now();current.transcript=$('#transcript').value.trim();current.sections=structure(current.transcript,current.output);let logs=getLogs();logs.push(current);saveLogs(logs.slice(-50));openLog(current.id)};
@@ -139,4 +140,4 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
     if(refreshing) return; refreshing=true; window.location.reload();
   });
 }
-applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.3.2 · '+navigator.userAgent.slice(0,55)),50);
+applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.3.3 · '+navigator.userAgent.slice(0,55)),50);

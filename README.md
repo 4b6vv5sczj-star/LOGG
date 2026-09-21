@@ -52,5 +52,12 @@ Frontend config points to the Cloud Run service already created for LOGG. Upload
 On iPhone, LOGG chooses the first MediaRecorder format Safari supports (MP4/AAC on Safari where available; WebM/Opus elsewhere). Google Speech-to-Text V2 auto-decoding supports both MP4/AAC and WebM/Opus.
 
 
-## v0.3.2 diagnostic
+## v0.3.3 diagnostic
 Adds visible iPhone recording pipeline diagnostics, prefers MP4 on Apple devices, records with 1-second MediaRecorder timeslices, explicitly requests final data before stopping, and adds a touch-safe Back control. The diagnostics show CLOUD, MIC, FORMAT, RECORDING, AUDIO KB, STOP, UPLOADING, HTTP and TEXT stages.
+
+
+## v0.3.3
+- Normal meeting view cleaned up; diagnostics are hidden by default. Add `?debug=1` to the app URL to show them.
+- Back arrow now immediately saves the draft locally, stops microphone capture, and returns to the LOGG home screen.
+- Speech status simplified to Listening / Transcribing.
+- Keeps the working EU Chirp 3 backend configuration from v0.3.2.
