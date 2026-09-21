@@ -16,7 +16,17 @@ function speechDetail(msg=''){const el=$('#speechDetail');if(el)el.textContent=m
 let recorder=null, stream=null, chunks=[], uploadBusy=false, chunkTimer=null, audioCtx=null, analyser=null, meterRAF=null, stopping=false, chunkBytes=0, chunkCount=0, finishFlush=false, finishWaiter=null;
 const DEBUG=new URLSearchParams(location.search).get('debug')==='1'; if(DEBUG) document.documentElement.classList.add('debug-mode');
 function diag(msg){const el=$('#diagnostics');if(DEBUG&&el){const stamp=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});el.textContent=stamp+' · '+msg+'\n'+el.textContent.split('\n').slice(0,5).join('\n')}}
-const MARINE_HINTS=['superyacht','sailing yacht','Baltic Yachts','fairing','prepreg','infusion','lamination','bulkhead','deckhouse','passerelle','tender garage','beach club','sea trial','commissioning','classification','class','flag state','HVAC','AV IT','joinery','outfitting','rigging','carbon mast','boom','standing rigging','running rigging','hydraulics','composites','teak deck'];
+const MARINE_HINTS=[
+  'superyacht','sailing yacht','Baltic Yachts','yard','owner team','owners team','project manager','naval architect','designer',
+  'class','classification','class society','flag state','survey','survey item','approval drawing','approved drawing','GA','general arrangement',
+  'change order','variation order','NCR','non-conformance','punch list','snag list','long lead item','delivery schedule','milestone','critical path',
+  'fairing','paint system','topcoat','primer','prepreg','infusion','lamination','composites','carbon','bulkhead','hull','deckhouse','superstructure',
+  'joinery','outfitting','interior','teak deck','passerelle','tender garage','beach club','transom','hatch','door','glazing',
+  'HVAC','AV IT','AV/IT','electrical','hydraulics','plumbing','ventilation','generator','shore power','battery bank','automation',
+  'mast','carbon mast','boom','rigging','standing rigging','running rigging','forestay','backstay','shroud','winch','sail handling',
+  'commissioning','harbour trial','harbor trial','sea trial','inclining test','load test','acceptance test','handover','delivery','warranty',
+  'shipyard','subcontractor','supplier','vendor','owner representative','captain','crew','engine room','machinery','propulsion','steering'
+];
 async function checkBackend(base){
   const r=await fetch(base+'/health',{cache:'no-store'});
   if(!r.ok) throw new Error('Backend health check failed');
@@ -195,79 +205,131 @@ async function finishMeeting(){
 $('#finishBtn').addEventListener('click',finishMeeting);
 
 function structure(text,lang){
-  // Intelligence v2 — zero-cost, on-device meeting analysis.
-  // Core rule: the raw transcript is always preserved. Extracted items are suggestions,
-  // never destructive edits, and ambiguous commitments are explicitly marked for confirmation.
+  // Intelligence v3 — context-aware, zero-cost, on-device meeting analysis.
+  // The raw transcript remains the source of truth. LOGG extracts commitments and
+  // decisions conservatively and marks low-confidence items for confirmation.
   const raw=(text||'').trim();
-  const empty=lang==='sv'?'Inga anteckningar registrerades.':'No notes were captured.';
+  const sv=lang==='sv';
+  const empty=sv?'Inga anteckningar registrerades.':'No notes were captured.';
   if(!raw)return{summary:empty,decisions:'—',actions:'—',questions:'—',notes:'—'};
 
   const clean=raw.replace(/\s+/g,' ').replace(/\s+([,.!?;:])/g,'$1').trim();
   const sentences=(clean.match(/[^.!?]+[.!?]?/g)||[clean]).map(x=>x.trim()).filter(x=>x.length>2);
-  const lower=s=>s.toLocaleLowerCase(lang==='sv'?'sv-FI':'en-GB');
-  const normalized=s=>lower(s).normalize('NFKD').replace(/[^a-z0-9åäöéüñ]+/g,' ').trim();
+  const lower=s=>String(s||'').toLocaleLowerCase(sv?'sv-FI':'en-GB');
+  const norm=s=>lower(s).normalize('NFKD').replace(/[^a-z0-9åäöéüñ]+/g,' ').trim();
   const unique=[]; const seen=new Set();
-  for(const s of sentences){const k=normalized(s);if(k&&!seen.has(k)){seen.add(k);unique.push(s)}}
+  for(const s of sentences){const k=norm(s);if(k&&!seen.has(k)){seen.add(k);unique.push(s)}}
 
-  // Swedish + English + Finnish + Spanish meeting language. English yacht vocabulary is
-  // intentionally accepted inside otherwise Swedish/Finnish/Spanish sentences.
-  const decisionStrong=/\b(beslut(?:et|ade|at)?|beslöt|bestäm(?:de|t)|överens(?:kom|kommelse)?|godkän(?:d|t|de)|vi kör på|vi väljer|vi går vidare med|päät(?:ös|ettiin|ämme)|sovittiin|hyväksyttiin|decid(?:ed|e)|decision|agreed|approved|we(?:'ll| will) proceed|we chose|we choose|se decidió|acordamos|aprobado|vamos con)\b/i;
-  const decisionWeak=/\b(landar i|enades om|inriktningen är|planen är|the plan is|direction is|linja on|suunnitelma on|el plan es)\b/i;
-  const actionVerb=/\b(ska|skall|måste|behöver|tar|fixar|skickar|kollar|kontrollerar|bekräftar|bokar|uppdaterar|följer upp|återkommer|kontaktar|förbereder|levererar|will|shall|must|need(?:s)? to|going to|send|check|confirm|book|update|follow up|contact|prepare|deliver|selvittää|tarkistaa|lähettää|vahvistaa|päivittää|hoitaa|pitää|täytyy|enviar|revisar|confirmar|actualizar|preparar|contactar|debe|tenemos que)\b/i;
+  // Multilingual meeting language + code-switching. Patterns intentionally include
+  // ordinary project speech, not only explicit words such as "decision" or "action".
+  const decisionStrong=/\b(beslut(?:et|ade|at)?|beslöt|bestäm(?:de|t)|överens(?:kom|kommelse)?|godkän(?:d|t|de)|vi kör på|vi väljer|vi tar alternativ|vi går vidare med|då gör vi så|det blir|päät(?:ös|ettiin|ämme)|sovittiin|hyväksyttiin|decid(?:ed|e)|decision|agreed|approved|we(?:'ll| will) proceed|we(?:'ll| will) go with|let'?s go with|we chose|we choose|that'?s settled|se decidió|acordamos|aprobado|vamos con)\b/i;
+  const decisionWeak=/\b(landar i|enades om|inriktningen är|planen är|the plan is|direction is|preferred option|linja on|suunnitelma on|el plan es|la opción es)\b/i;
+  const actionVerb=/\b(ska|skall|måste|behöver|tar|fixar|skickar|kollar|kontrollerar|bekräftar|bokar|uppdaterar|följer upp|återkommer|kontaktar|förbereder|levererar|ordnar|säkerställer|will|shall|must|need(?:s)? to|going to|send|check|confirm|book|update|follow up|come back|contact|prepare|deliver|arrange|verify|review|issue|provide|selvittää|tarkistaa|lähettää|vahvistaa|päivittää|hoitaa|pitää|täytyy|järjestää|enviar|revisar|confirmar|actualizar|preparar|contactar|debe|tenemos que|organizar)\b/i;
+  const futureCommit=/\b(i'?ll|i will|we'?ll|we will|jag tar|jag fixar|jag återkommer|vi tar|vi fixar|minä hoidan|me hoidamme|yo lo hago|nosotros lo hacemos)\b/i;
   const actionCue=/\b(action|action point|åtgärd|att göra|todo|to-do|uppföljning|follow[- ]?up|tehtävä|acción|tarea)\b/i;
-  const requestCue=/\b(kan du|kan ni|kan vi|skulle du|could you|can you|can we|please|voitko|voitteko|podrías|puedes|podemos)\b/i;
-  const tentative=/\b(bör|borde|kanske|eventuellt|kan vi|should|could|maybe|perhaps|might|ehkä|pitäisi|quizá|tal vez|deberíamos)\b/i;
-  const questionCue=/\?$|\b(öppen fråga|oklart|återstår|behöver avgöras|vem ska|när ska|hur ska|open question|unclear|to be decided|who will|when will|how will|avoin kysymys|epäselvä|kuka|milloin|cómo|cuándo|quién|pregunta abierta|por decidir)\b/i;
-  const deadlineRx=/\b(idag|imorgon|övermorgon|denna vecka|nästa vecka|före lunch|innan lunch|innan mötet|måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|today|tomorrow|this week|next week|before lunch|before the meeting|monday|tuesday|wednesday|thursday|friday|saturday|sunday|tänään|huomenna|ensi viikolla|maanantai|tiistai|keskiviikko|torstai|perjantai|hoy|mañana|esta semana|próxima semana|lunes|martes|miércoles|jueves|viernes|\d{1,2}[.\/-]\d{1,2}(?:[.\/-]\d{2,4})?)\b/i;
+  const requestCue=/\b(kan du|kan ni|skulle du|could you|can you|would you|please|voitko|voitteko|podrías|puedes)\b/i;
+  const tentative=/\b(bör|borde|kanske|eventuellt|kan vi|skulle kunna|should|could|maybe|perhaps|might|what if|ehkä|pitäisi|voitaisiin|quizá|tal vez|deberíamos|podríamos)\b/i;
+  const questionCue=/\?$|\b(öppen fråga|oklart|återstår|behöver avgöras|behöver reda ut|vem ska|när ska|hur ska|open question|unclear|to be decided|to be confirmed|who will|when will|how will|avoin kysymys|epäselvä|kuka|milloin|cómo|cuándo|quién|pregunta abierta|por decidir)\b/i;
+  const blockerCue=/\b(blocker|blocked|risk|riskerar|försen|delay|late|waiting for|väntar på|pending|saknas|missing|not approved|inte godkänd|ei hyväksytty|retraso|pendiente)\b/i;
+  const deadlineRx=/\b(idag|imorgon|övermorgon|denna vecka|nästa vecka|före lunch|innan lunch|innan mötet|innan fredag|före fredag|måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|today|tomorrow|this week|next week|before lunch|before the meeting|before friday|by monday|by tuesday|by wednesday|by thursday|by friday|by saturday|by sunday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|tänään|huomenna|ensi viikolla|maanantai|tiistai|keskiviikko|torstai|perjantai|hoy|mañana|esta semana|próxima semana|lunes|martes|miércoles|jueves|viernes|\d{1,2}[.\/-]\d{1,2}(?:[.\/-]\d{2,4})?)\b/i;
   const explicitOwner=/\b(?:ansvar(?:ig)?|owner|responsible|vastuu|responsable)\s*[:=-]?\s*([A-ZÅÄÖÉÜÑ][\p{L}'-]{1,24})/iu;
-  const leadingOwner=/^(?:action[:\s-]*)?([A-ZÅÄÖÉÜÑ][\p{L}'-]{1,24}|jag|vi|du|han|hon|de|i|we|you|he|she|they)\b/iu;
-  const addressedOwner=/^([A-ZÅÄÖÉÜÑ][\p{L}'-]{1,24})[,,:]\s*(?:kan|could|can|please|voitko|puedes)\b/iu;
-  const filler=/^(ja|jo|nej|okej|ok|okay|right|yes|no|joo|kyllä|ei|sí|vale)[,.!\s]*$/i;
+  const addressedOwner=/^([A-ZÅÄÖÉÜÑ][\p{L}'-]{1,24})[,,:]\s*(?:kan|could|can|would|please|voitko|puedes)\b/iu;
+  const personCommit=/^([A-ZÅÄÖÉÜÑ][\p{L}'-]{1,24})\s+(?:ska|skall|tar|fixar|kollar|kontrollerar|skickar|bekräftar|återkommer|will|shall|is going to|checks|sends|confirms|reviews|provides|hoitaa|tarkistaa|lähettää|vahvistaa|revisa|envía|confirma)\b/iu;
+  const pronounOwner=/^(jag|vi|du|han|hon|de|i|we|you|he|she|they|minä|me|sinä|hän|yo|nosotros)\b/iu;
+  const filler=/^(ja|jo|nej|okej|ok|okay|right|yes|no|joo|kyllä|ei|sí|vale|bra|good|fine|selvä)[,.!\s]*$/i;
+  const continuation=/^(och|men|så|dessutom|sedan|sen|also|and|but|so|then|plus|ja|och då|mutta|ja sitten|también|y|pero|entonces)\b/i;
 
-  const decisions=[], actions=[], questions=[], discussion=[];
-  const score=[];
-  for(const s of unique){
-    const n=lower(s);
-    if(filler.test(n))continue;
+  const domainScore=s=>{const n=lower(s);let score=0;for(const h of MARINE_HINTS)if(n.includes(h.toLowerCase()))score++;return Math.min(score,3)};
+  const findOwner=s=>(s.match(explicitOwner)||s.match(addressedOwner)||s.match(personCommit)||s.match(pronounOwner)||[])[1]||'';
+  const findDue=s=>(s.match(deadlineRx)||[])[0]||'';
+  const decisions=[], actionObjs=[], questions=[], score=[];
+
+  // Pass 1: classify each utterance, retaining neighbours for context in pass 2.
+  const rows=unique.map((s,i)=>{
     const isQuestion=questionCue.test(s);
     const dStrong=decisionStrong.test(s), dWeak=decisionWeak.test(s);
-    const hasAction=actionVerb.test(s)||actionCue.test(s)||requestCue.test(s);
-    if(isQuestion && !hasAction){questions.push(s);score.push({s,type:'q',weight:2});continue}
-    if(dStrong||dWeak){decisions.push(s);score.push({s,type:'d',weight:dStrong?4:2});continue}
-    if(hasAction){
-      const owner=(s.match(explicitOwner)||s.match(addressedOwner)||s.match(leadingOwner)||[])[1]||'';
-      const due=(s.match(deadlineRx)||[])[0]||'';
-      const uncertain=tentative.test(s)||(!actionVerb.test(s)&&!actionCue.test(s));
-      const meta=[];
-      if(owner)meta.push((lang==='sv'?'Ansvar: ':'Owner: ')+owner);
-      if(due)meta.push((lang==='sv'?'Tid: ':'Due: ')+due);
-      if(uncertain)meta.push(lang==='sv'?'bekräfta':'confirm');
-      actions.push('☐ '+s+(meta.length?'  ['+meta.join(' · ')+']':''));
-      score.push({s,type:'a',weight:owner||due?4:3});continue;
+    const actionStrength=(actionCue.test(s)?3:0)+(requestCue.test(s)?2:0)+(futureCommit.test(s)?2:0)+(actionVerb.test(s)?2:0)+(findOwner(s)?1:0)+(findDue(s)?1:0);
+    return {s,i,isQuestion,dStrong,dWeak,actionStrength,domain:domainScore(s),tentative:tentative.test(s),blocker:blockerCue.test(s)};
+  });
+
+  for(const r of rows){
+    const s=r.s, prev=rows[r.i-1], next=rows[r.i+1];
+    if(filler.test(lower(s)))continue;
+
+    // Questions remain questions unless they contain a real commitment/request.
+    if(r.isQuestion && r.actionStrength<2){questions.push(s);score.push({s,type:'q',weight:2+r.domain});continue}
+
+    // Explicit/implicit decisions. A weak decision gets stronger when the previous sentence
+    // presents alternatives or the next sentence starts implementation.
+    let decisionConfidence=r.dStrong?0.95:r.dWeak?0.68:0;
+    if(!decisionConfidence && /\b(option|alternativ|vaihtoehto|opción)\b/i.test(prev?.s||'') && /\b(we go with|vi tar|vi kör|det blir|let'?s|vamos con)\b/i.test(s)) decisionConfidence=.82;
+    if(decisionConfidence){
+      decisions.push(s+(decisionConfidence<.75?(sv?'  [bekräfta]':'  [confirm]'):''));
+      score.push({s,type:'d',weight:decisionConfidence>.8?5:3});
+      continue;
     }
-    if(isQuestion){questions.push(s);score.push({s,type:'q',weight:2});continue}
-    discussion.push(s);
-    const marine=MARINE_HINTS.some(h=>n.includes(h.toLowerCase()));
-    const informative=s.length>45?2:1;
-    score.push({s,type:'body',weight:informative+(marine?1:0)});
+
+    // Context-aware actions. A sentence may supply the owner/task while the next sentence
+    // supplies the deadline, or the previous sentence may supply the object/background.
+    if(r.actionStrength>=2){
+      let owner=findOwner(s), due=findDue(s), combined=s;
+      let confidence=.56 + Math.min(r.actionStrength,5)*.07;
+      if(owner)confidence+=.08;
+      if(due)confidence+=.08;
+      if(r.tentative)confidence-=.22;
+
+      // Attach a short following deadline/context sentence instead of creating a duplicate action.
+      if(next && !next.dStrong && next.actionStrength<2 && (findDue(next.s)||/^we need it|^vi behöver (?:det|den)|^det behövs|^needed|^tarvitaan|^lo necesitamos/i.test(next.s))){
+        const nd=findDue(next.s); if(nd&&!due){due=nd;confidence+=.08}
+        combined=s+' '+next.s;
+        next.consumed=true;
+      }
+      // If the action is a pronoun-only continuation, use the immediately preceding technical
+      // sentence as context so "Peter will check it" does not lose what "it" refers to.
+      if(prev && r.i>0 && /\b(it|det|den|detta|this|that|sen|se|lo|la)\b/i.test(s) && (prev.domain||prev.blocker) && !prev.dStrong){
+        combined=prev.s+' → '+combined;
+        confidence+=.05;
+      }
+      confidence=Math.max(.2,Math.min(.99,confidence));
+      const meta=[];
+      if(owner)meta.push((sv?'Ansvar: ':'Owner: ')+owner);
+      if(due)meta.push((sv?'Tid: ':'Due: ')+due);
+      if(confidence<.74)meta.push(sv?'bekräfta':'confirm');
+      actionObjs.push({text:'☐ '+combined+(meta.length?'  ['+meta.join(' · ')+']':''),confidence,source:s});
+      score.push({s,type:'a',weight:confidence>.8?5:3+r.domain});
+      continue;
+    }
+
+    if(r.isQuestion){questions.push(s);score.push({s,type:'q',weight:2+r.domain});continue}
+    if(r.consumed)continue;
+
+    // Discussion/background. Risks, blockers and domain-specific sentences are more summary-worthy.
+    let weight=(s.length>55?2:1)+r.domain+(r.blocker?2:0);
+    if(continuation.test(s) && prev)weight+=.3;
+    score.push({s,type:'body',weight});
   }
 
-  // Summary is deliberately extractive: no invented facts. Prefer informative discussion,
-  // then one key decision/action if the transcript is mostly commitments.
-  const summaryCandidates=score.filter(x=>x.type==='body').sort((a,b)=>b.weight-a.weight);
-  if(!summaryCandidates.length) summaryCandidates.push(...score.filter(x=>x.type==='d'||x.type==='a'));
-  const summary=[]; let chars=0;
-  for(const x of summaryCandidates){if(summary.length>=4||chars+x.s.length>620)break;summary.push(x.s);chars+=x.s.length}
+  // Remove near-duplicate extracted items without altering the raw notes.
+  const dedupe=arr=>{const out=[],keys=[];for(const x of arr){const k=norm(typeof x==='string'?x:x.text);if(!k)continue;if(keys.some(q=>q===k||q.includes(k)||k.includes(q)))continue;keys.push(k);out.push(x)}return out};
+  const d2=dedupe(decisions), q2=dedupe(questions), a2=dedupe(actionObjs);
+
+  // Extractive summary only: prefer project substance, blockers and decisions. Preserve transcript order
+  // among selected sentences so the summary reads naturally rather than as a score-sorted list.
+  let candidates=score.filter(x=>x.type==='body'||x.type==='d').sort((a,b)=>b.weight-a.weight).slice(0,7);
+  if(candidates.length<2)candidates=candidates.concat(score.filter(x=>x.type==='a').slice(0,2));
+  const picked=[...new Map(candidates.map(x=>[norm(x.s),x])).values()].sort((a,b)=>unique.indexOf(a.s)-unique.indexOf(b.s));
+  const summary=[];let chars=0;
+  for(const x of picked){if(summary.length>=4||chars+x.s.length>700)break;summary.push(x.s);chars+=x.s.length}
 
   return{
     summary:summary.join(' ')||empty,
-    decisions:decisions.slice(0,12).join('\n')||'—',
-    actions:actions.slice(0,18).join('\n')||'—',
-    questions:questions.slice(0,12).join('\n')||'—',
+    decisions:d2.slice(0,14).join('\n')||'—',
+    actions:a2.slice(0,20).map(x=>x.text).join('\n')||'—',
+    questions:q2.slice(0,14).join('\n')||'—',
     notes:raw
   };
 }
-function openLog(id){let l=getLogs().find(x=>x.id===id);if(!l)return;current=l;$('#resultTitle').textContent=l.name;$('#resultMeta').textContent=`${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}`;let s=l.sections||structure(l.transcript,l.output);let defs=[['summary','summary'],['decisions','decisions'],['actions','actions'],['questions','questions'],['notes','notes']];$('#sections').innerHTML='<div class="intelligence-note"><span>LOGG INTELLIGENCE · v2</span><b>'+(ui==='sv'?'Råtranskriptionen bevaras alltid':'Raw transcript always preserved')+'</b></div>'+defs.map(([k,label])=>`<div class="section-card"><h3>${t(label)}</h3><textarea data-key="${k}">${esc(s[k])}</textarea></div>`).join('');$$('#sections textarea').forEach(a=>a.oninput=()=>{current.sections[a.dataset.key]=a.value;let logs=getLogs(),i=logs.findIndex(x=>x.id===current.id);logs[i]=current;saveLogs(logs)});goTo('result')}
+function openLog(id){let l=getLogs().find(x=>x.id===id);if(!l)return;current=l;$('#resultTitle').textContent=l.name;$('#resultMeta').textContent=`${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}`;let s=l.sections||structure(l.transcript,l.output);let defs=[['summary','summary'],['decisions','decisions'],['actions','actions'],['questions','questions'],['notes','notes']];$('#sections').innerHTML='<div class="intelligence-note"><span>LOGG INTELLIGENCE · v3</span><b>'+(ui==='sv'?'Råtranskriptionen bevaras alltid':'Raw transcript always preserved')+'</b></div>'+defs.map(([k,label])=>`<div class="section-card"><h3>${t(label)}</h3><textarea data-key="${k}">${esc(s[k])}</textarea></div>`).join('');$$('#sections textarea').forEach(a=>a.oninput=()=>{current.sections[a.dataset.key]=a.value;let logs=getLogs(),i=logs.findIndex(x=>x.id===current.id);logs[i]=current;saveLogs(logs)});goTo('result')}
 function plain(){let s=current.sections;return `${current.name}\n${fmt(current.start)} · ${duration(current.end-current.start)}\n\n${t('summary')}\n${s.summary}\n\n${t('decisions')}\n${s.decisions}\n\n${t('actions')}\n${s.actions}\n\n${t('questions')}\n${s.questions}\n\n${t('notes')}\n${s.notes}`}
 $('#copyBtn').onclick=async()=>{await navigator.clipboard.writeText(plain());toast(t('copied'))};
 // Minimal store-only ZIP writer for a dependency-free .docx (OOXML package).
@@ -277,7 +339,7 @@ $('#wordBtn').onclick=()=>{let s=current.sections,body=p('LOGG',true,34)+p('MEET
 $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.6.0',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.7.0',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
@@ -296,4 +358,4 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
 // Purge legacy PWA caches once so iPhone cannot keep executing stale 0.3.x JS.
 (async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-v0.3'))await caches.delete(k)}}catch{}})();
 
-goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.6.0 · '+navigator.userAgent.slice(0,55)),50);
+goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.7.0 · '+navigator.userAgent.slice(0,55)),50);
