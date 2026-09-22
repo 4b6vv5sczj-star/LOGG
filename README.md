@@ -17,3 +17,9 @@ Built on the frozen v0.8 modular/speech baseline.
 - Premium LOGG document header in Word/PDF exports
 
 No Google credentials are present in the frontend.
+
+
+## v0.9.1 Notes Export Navigation Fix
+- PDF export no longer opens a separate blank browser tab; printing runs from a temporary hidden document so returning from the iOS print/share sheet keeps the user inside the Note.
+- Export sheet can be dismissed with Cancel, backdrop tap, or Escape.
+- Notes module 1.0.1. Core/Home/Meetings unchanged.
