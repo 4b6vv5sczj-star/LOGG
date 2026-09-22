@@ -23,3 +23,9 @@ No Google credentials are present in the frontend.
 - PDF export no longer opens a separate blank browser tab; printing runs from a temporary hidden document so returning from the iOS print/share sheet keeps the user inside the Note.
 - Export sheet can be dismissed with Cancel, backdrop tap, or Escape.
 - Notes module 1.0.1. Core/Home/Meetings unchanged.
+
+## v0.9.3 Meeting Setup Cancel
+- Adds an explicit Cancel/Avbryt action to the meeting setup sheet.
+- Cancelling returns to the locked Home screen without creating a meeting.
+- Clears unstarted meeting name and consent state.
+- Notes, Speech, Meetings runtime and Home composition otherwise unchanged.
