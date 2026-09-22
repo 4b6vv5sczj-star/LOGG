@@ -81,4 +81,5 @@ body[data-view="archive"] .topbar{display:none}
 /* v0.11 Security Identity */
 .top-actions{display:flex;gap:8px;align-items:center}.topbar .auth-btn{pointer-events:auto;position:relative;z-index:60;border:1px solid #ffffff45;background:#0002;color:#fff;border-radius:99px;height:34px;padding:0 10px;font:700 8px Manrope;letter-spacing:.12em;backdrop-filter:blur(12px);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.topbar .auth-btn.signed-in{border-color:#b89b6780;color:#ead8b8}.auth-card p{font-size:12px;line-height:1.7;color:var(--taupe)}.auth-signout{width:100%;margin-top:10px}.auth-card .primary[hidden],.auth-card .paper-btn[hidden]{display:none}
 
-.auth-diagnostic{margin-top:14px;opacity:.62;font-size:11px;letter-spacing:.04em;word-break:break-word}
+/* v0.11.1 Identity iOS diagnostics */
+.auth-status{margin-top:14px;font-size:12px;line-height:1.45;letter-spacing:.02em;opacity:.68;overflow-wrap:anywhere}.auth-status.auth-error{opacity:.9}.auth-card .primary:disabled{opacity:.55;cursor:wait}

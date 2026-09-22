@@ -7,58 +7,30 @@ function openAuth(){const s=$('#authSheet');if(s)s.hidden=false;updateAuthUI()}
 function closeAuth(){const s=$('#authSheet');if(s)s.hidden=true}
 async function requireLoggUser(){if(loggUser)return true;openAuth();return false}
 async function authHeaders(){if(!loggAuth?.currentUser)throw new Error(ui==='sv'?'LOGG kräver inloggning':'LOGG sign-in required');const token=await loggAuth.currentUser.getIdToken();return {Authorization:'Bearer '+token};}
-function authDiag(msg){const el=$('#authDiagnostic');if(el)el.textContent=msg;try{sessionStorage.setItem('loggAuthDiag',msg)}catch(_){}}
-async function initLoggAuth(){
-  try{
-    if(!window.firebase||!window.LOGG_CONFIG?.FIREBASE){authDiag('Auth unavailable · Firebase not loaded');return;}
-    if(!firebase.apps.length)firebase.initializeApp(window.LOGG_CONFIG.FIREBASE);
-    loggAuth=firebase.auth();
-    loggAuth.useDeviceLanguage();
-    authDiag('Auth starting…');
+function setAuthStatus(text='',isError=false){const el=$('#authStatus');if(!el)return;el.textContent=text;el.classList.toggle('auth-error',!!isError);el.hidden=!text;}
+function authErrorText(e){const code=e?.code||'auth/unknown-error';const msg=e?.message||'';return `${code}${msg?` · ${msg.replace(/^Firebase:\s*/,'').slice(0,180)}`:''}`;}
+async function initLoggAuth(){try{
+  if(!window.firebase||!window.LOGG_CONFIG?.FIREBASE){setAuthStatus('Firebase Auth unavailable',true);return;}
+  if(!firebase.apps.length)firebase.initializeApp(window.LOGG_CONFIG.FIREBASE);
+  loggAuth=firebase.auth(); loggAuth.useDeviceLanguage();
+  try{await loggAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);setAuthStatus('');}catch(e){setAuthStatus('Session persistence · '+authErrorText(e),true);}
+  loggAuth.onAuthStateChanged(u=>{loggUser=u||null;updateAuthUI();if(u)setAuthStatus('Signed in securely.');});
+  $('#authBtn')?.addEventListener('click',openAuth); $('#closeAuth')?.addEventListener('click',closeAuth);
+  $('#authSheet')?.addEventListener('click',e=>{if(e.target.id==='authSheet')closeAuth()});
+  $('#googleSignIn')?.addEventListener('click',async()=>{
+    const btn=$('#googleSignIn'); if(btn?.disabled)return;
     try{
-      await loggAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-      authDiag('Secure session ready');
-    }catch(e){authDiag('Session storage error · '+(e.code||e.message||e));}
-
-    // Complete a redirect before deciding whether the user is signed in.
-    // This is important on iPhone/PWA where an auth popup can become a full-page navigation.
-    try{
-      const result=await loggAuth.getRedirectResult();
-      if(result&&result.user){loggUser=result.user;authDiag('Google sign-in returned · session restored');updateAuthUI();closeAuth();}
-    }catch(e){authDiag('Google return error · '+(e.code||e.message||e));}
-
-    loggAuth.onAuthStateChanged(u=>{
-      loggUser=u||null;
-      updateAuthUI();
-      authDiag(u?'Signed in · '+(u.email||u.displayName||'Google user'):'Not signed in');
-      if(u)closeAuth();
-    });
-
-    $('#authBtn')?.addEventListener('click',openAuth);
-    $('#closeAuth')?.addEventListener('click',closeAuth);
-    $('#authSheet')?.addEventListener('click',e=>{if(e.target.id==='authSheet')closeAuth()});
-    $('#googleSignIn')?.addEventListener('click',async()=>{
-      const provider=new firebase.auth.GoogleAuthProvider();
-      provider.setCustomParameters({prompt:'select_account'});
-      authDiag('Opening Google sign-in…');
-      try{
-        // Popup is preferred because LOGG is hosted on GitHub Pages while the
-        // Firebase auth helper is on firebaseapp.com. It avoids Safari redirect-storage issues.
-        const result=await loggAuth.signInWithPopup(provider);
-        if(result?.user){loggUser=result.user;updateAuthUI();authDiag('Signed in · '+(result.user.email||'Google user'));closeAuth();}
-      }catch(e){
-        const code=e?.code||'';
-        authDiag('Popup error · '+(code||e.message||e));
-        // If iOS has converted/blocked the popup, redirect is the safe fallback.
-        if(['auth/popup-blocked','auth/cancelled-popup-request','auth/web-storage-unsupported','auth/internal-error'].includes(code)){
-          try{authDiag('Trying secure redirect…');await loggAuth.signInWithRedirect(provider);return;}catch(r){authDiag('Redirect error · '+(r.code||r.message||r));}
-        }
-        toast('Sign-in: '+(e.message||e));
-      }
-    });
-    $('#googleSignOut')?.addEventListener('click',async()=>{await loggAuth.signOut();loggUser=null;updateAuthUI();authDiag('Signed out')});
-  }catch(e){console.error('LOGG auth init',e);authDiag('Auth init error · '+(e.code||e.message||e));}
-}
+      if(btn){btn.disabled=true;btn.textContent='Opening Google…';}
+      setAuthStatus('Opening Google sign-in…');
+      const provider=new firebase.auth.GoogleAuthProvider(); provider.setCustomParameters({prompt:'select_account'});
+      const result=await loggAuth.signInWithPopup(provider);
+      loggUser=result?.user||loggAuth.currentUser||null; updateAuthUI(); setAuthStatus(loggUser?'Signed in securely.':'Google returned without a user session.',!loggUser);
+      if(loggUser)setTimeout(closeAuth,450);
+    }catch(e){console.error('LOGG popup auth',e);setAuthStatus('Google sign-in · '+authErrorText(e),true);toast('Sign-in failed');}
+    finally{if(btn){btn.disabled=false;btn.textContent='Continue with Google';}}
+  });
+  $('#googleSignOut')?.addEventListener('click',async()=>{try{await loggAuth.signOut();setAuthStatus('Signed out.');}catch(e){setAuthStatus('Sign-out · '+authErrorText(e),true);}updateAuthUI();});
+}catch(e){console.error('LOGG auth init',e);setAuthStatus('Auth init · '+authErrorText(e),true);}}
 
 const SPEECH_LANGS=new Set(['sv-SE','en-GB','fi-FI','es-ES']);
 let speechLang={mode:'auto',locked:null,candidate:null,score:0};
