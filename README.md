@@ -34,3 +34,12 @@ No Google credentials are present in the frontend.
 ## v0.9.4 Notes usability
 - Explicit SAVED NOTES archive entry inside Notes.
 - Enter continues bullet and TODO lists automatically; Enter on an empty list item exits the list.
+
+
+## v0.9.5 Meeting Reliability
+- Requests the Screen Wake Lock API while an active meeting is listening.
+- Releases wake lock on pause, finish, or leaving the meeting.
+- Re-acquires wake lock when LOGG becomes visible again.
+- Recording watchdog monitors microphone/MediaRecorder health and warns if capture appears interrupted.
+- Attempts recorder recovery when returning to LOGG after an interruption.
+- iOS/PWA limitation remains: background/locked-screen microphone capture cannot be guaranteed; LOGG therefore keeps the screen awake where supported.

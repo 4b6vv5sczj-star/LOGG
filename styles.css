@@ -62,3 +62,6 @@ body[data-view="archive"] .topbar{display:none}
 
 /* v0.9.3 Meeting setup escape */
 .cancel-start{width:100%;height:44px;border:0;background:transparent;color:var(--taupe);font:700 10px Manrope;letter-spacing:.1em;text-transform:uppercase;margin-top:7px}.cancel-start:active{color:var(--ink)}
+
+/* v0.9.5 Meeting Reliability */
+.reliability-status{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.68;margin:7px 0 2px}.reliability-status.warning{opacity:1;font-weight:700}
