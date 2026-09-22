@@ -14,7 +14,15 @@ async function initLoggAuth(){try{
   if(!firebase.apps.length)firebase.initializeApp(window.LOGG_CONFIG.FIREBASE);
   loggAuth=firebase.auth(); loggAuth.useDeviceLanguage();
   try{await loggAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);setAuthStatus('');}catch(e){setAuthStatus('Session persistence · '+authErrorText(e),true);}
-  loggAuth.onAuthStateChanged(u=>{loggUser=u||null;updateAuthUI();if(u)setAuthStatus('Signed in securely.');});
+
+  // Firebase Hosting and Firebase Auth now share the same Firebase project/domain context.
+  // Complete a pending Google redirect before relying on auth state for the UI.
+  try{
+    const redirectResult=await loggAuth.getRedirectResult();
+    if(redirectResult?.user){loggUser=redirectResult.user;setAuthStatus('Signed in securely.');setTimeout(closeAuth,450);}
+  }catch(e){console.error('LOGG redirect result',e);setAuthStatus('Google redirect · '+authErrorText(e),true);}
+
+  loggAuth.onAuthStateChanged(u=>{loggUser=u||null;updateAuthUI();if(u){setAuthStatus('Signed in securely.');setTimeout(closeAuth,450);}});
   $('#authBtn')?.addEventListener('click',openAuth); $('#closeAuth')?.addEventListener('click',closeAuth);
   $('#authSheet')?.addEventListener('click',e=>{if(e.target.id==='authSheet')closeAuth()});
   $('#googleSignIn')?.addEventListener('click',async()=>{
@@ -23,11 +31,8 @@ async function initLoggAuth(){try{
       if(btn){btn.disabled=true;btn.textContent='Opening Google…';}
       setAuthStatus('Opening Google sign-in…');
       const provider=new firebase.auth.GoogleAuthProvider(); provider.setCustomParameters({prompt:'select_account'});
-      const result=await loggAuth.signInWithPopup(provider);
-      loggUser=result?.user||loggAuth.currentUser||null; updateAuthUI(); setAuthStatus(loggUser?'Signed in securely.':'Google returned without a user session.',!loggUser);
-      if(loggUser)setTimeout(closeAuth,450);
-    }catch(e){console.error('LOGG popup auth',e);setAuthStatus('Google sign-in · '+authErrorText(e),true);toast('Sign-in failed');}
-    finally{if(btn){btn.disabled=false;btn.textContent='Continue with Google';}}
+      await loggAuth.signInWithRedirect(provider);
+    }catch(e){console.error('LOGG redirect auth',e);setAuthStatus('Google sign-in · '+authErrorText(e),true);toast('Sign-in failed');if(btn){btn.disabled=false;btn.textContent='Continue with Google';}}
   });
   $('#googleSignOut')?.addEventListener('click',async()=>{try{await loggAuth.signOut();setAuthStatus('Signed out.');}catch(e){setAuthStatus('Sign-out · '+authErrorText(e),true);}updateAuthUI();});
 }catch(e){console.error('LOGG auth init',e);setAuthStatus('Auth init · '+authErrorText(e),true);}}
