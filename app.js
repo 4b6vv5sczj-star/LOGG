@@ -7,7 +7,58 @@ function openAuth(){const s=$('#authSheet');if(s)s.hidden=false;updateAuthUI()}
 function closeAuth(){const s=$('#authSheet');if(s)s.hidden=true}
 async function requireLoggUser(){if(loggUser)return true;openAuth();return false}
 async function authHeaders(){if(!loggAuth?.currentUser)throw new Error(ui==='sv'?'LOGG kräver inloggning':'LOGG sign-in required');const token=await loggAuth.currentUser.getIdToken();return {Authorization:'Bearer '+token};}
-function initLoggAuth(){try{if(!window.firebase||!window.LOGG_CONFIG?.FIREBASE)return;if(!firebase.apps.length)firebase.initializeApp(window.LOGG_CONFIG.FIREBASE);loggAuth=firebase.auth();loggAuth.useDeviceLanguage();loggAuth.onAuthStateChanged(u=>{loggUser=u||null;updateAuthUI()});$('#authBtn')?.addEventListener('click',openAuth);$('#closeAuth')?.addEventListener('click',closeAuth);$('#authSheet')?.addEventListener('click',e=>{if(e.target.id==='authSheet')closeAuth()});$('#googleSignIn')?.addEventListener('click',async()=>{try{const provider=new firebase.auth.GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});await loggAuth.signInWithPopup(provider);closeAuth()}catch(e){toast('Sign-in: '+(e.message||e))}});$('#googleSignOut')?.addEventListener('click',async()=>{await loggAuth.signOut();updateAuthUI()});}catch(e){console.error('LOGG auth init',e)}}
+function authDiag(msg){const el=$('#authDiagnostic');if(el)el.textContent=msg;try{sessionStorage.setItem('loggAuthDiag',msg)}catch(_){}}
+async function initLoggAuth(){
+  try{
+    if(!window.firebase||!window.LOGG_CONFIG?.FIREBASE){authDiag('Auth unavailable · Firebase not loaded');return;}
+    if(!firebase.apps.length)firebase.initializeApp(window.LOGG_CONFIG.FIREBASE);
+    loggAuth=firebase.auth();
+    loggAuth.useDeviceLanguage();
+    authDiag('Auth starting…');
+    try{
+      await loggAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+      authDiag('Secure session ready');
+    }catch(e){authDiag('Session storage error · '+(e.code||e.message||e));}
+
+    // Complete a redirect before deciding whether the user is signed in.
+    // This is important on iPhone/PWA where an auth popup can become a full-page navigation.
+    try{
+      const result=await loggAuth.getRedirectResult();
+      if(result&&result.user){loggUser=result.user;authDiag('Google sign-in returned · session restored');updateAuthUI();closeAuth();}
+    }catch(e){authDiag('Google return error · '+(e.code||e.message||e));}
+
+    loggAuth.onAuthStateChanged(u=>{
+      loggUser=u||null;
+      updateAuthUI();
+      authDiag(u?'Signed in · '+(u.email||u.displayName||'Google user'):'Not signed in');
+      if(u)closeAuth();
+    });
+
+    $('#authBtn')?.addEventListener('click',openAuth);
+    $('#closeAuth')?.addEventListener('click',closeAuth);
+    $('#authSheet')?.addEventListener('click',e=>{if(e.target.id==='authSheet')closeAuth()});
+    $('#googleSignIn')?.addEventListener('click',async()=>{
+      const provider=new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({prompt:'select_account'});
+      authDiag('Opening Google sign-in…');
+      try{
+        // Popup is preferred because LOGG is hosted on GitHub Pages while the
+        // Firebase auth helper is on firebaseapp.com. It avoids Safari redirect-storage issues.
+        const result=await loggAuth.signInWithPopup(provider);
+        if(result?.user){loggUser=result.user;updateAuthUI();authDiag('Signed in · '+(result.user.email||'Google user'));closeAuth();}
+      }catch(e){
+        const code=e?.code||'';
+        authDiag('Popup error · '+(code||e.message||e));
+        // If iOS has converted/blocked the popup, redirect is the safe fallback.
+        if(['auth/popup-blocked','auth/cancelled-popup-request','auth/web-storage-unsupported','auth/internal-error'].includes(code)){
+          try{authDiag('Trying secure redirect…');await loggAuth.signInWithRedirect(provider);return;}catch(r){authDiag('Redirect error · '+(r.code||r.message||r));}
+        }
+        toast('Sign-in: '+(e.message||e));
+      }
+    });
+    $('#googleSignOut')?.addEventListener('click',async()=>{await loggAuth.signOut();loggUser=null;updateAuthUI();authDiag('Signed out')});
+  }catch(e){console.error('LOGG auth init',e);authDiag('Auth init error · '+(e.code||e.message||e));}
+}
 
 const SPEECH_LANGS=new Set(['sv-SE','en-GB','fi-FI','es-ES']);
 let speechLang={mode:'auto',locked:null,candidate:null,score:0};
