@@ -443,7 +443,7 @@ $('#cancelStart').onclick=()=>{$('#startSheet').classList.add('hidden');$('#meet
   });
 }
 // Purge legacy PWA caches once so iPhone cannot keep executing stale 0.3.x JS.
-(async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-') && k!=='logg-v0.10.5')await caches.delete(k)}}catch{}})();
+(async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-') && k!=='logg-v0.10.6')await caches.delete(k)}}catch{}})();
 
 if($('#speechMode')) $('#speechMode').value=localStorage.loggSpeechMode||'auto';
 window.LOGG?.modules?.meetings?.init?.();
