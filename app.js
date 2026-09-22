@@ -388,7 +388,28 @@ function openLog(id){let l=getLogs().find(x=>x.id===id);if(!l)return;current=l;$
 function plain(){let s=current.sections;return `${current.name}\n${fmt(current.start)} · ${duration(current.end-current.start)}\n\n${t('summary')}\n${s.summary}\n\n${t('decisions')}\n${s.decisions}\n\n${t('actions')}\n${s.actions}\n\n${t('questions')}\n${s.questions}\n\n${t('notes')}\n${s.notes}`}
 $('#copyBtn').onclick=async()=>{await navigator.clipboard.writeText(plain());toast(t('copied'))};
 // Minimal store-only ZIP writer for a dependency-free .docx (OOXML package).
-const crcTable=(()=>{let t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();function crc32(a){let c=0xffffffff;for(let b of a)c=crcTable[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0}function u16(n){return[n&255,n>>>8&255]}function u32(n){return[n&255,n>>>8&255,n>>>16&255,n>>>24&255]}function zip(files){let enc=new TextEncoder(),out=[],central=[],off=0;for(let [name,content] of files){let nb=enc.encode(name),data=enc.encode(content),crc=crc32(data),h=[0x50,0x4b,3,4,...u16(20),0,0,0,0,0,0,...u32(crc),...u32(data.length),...u32(data.length),...u16(nb.length),0,0,...nb,...data];out.push(...h);central.push([name,nb,data,crc,off]);off+=h.length}let cstart=off;for(let [name,nb,data,crc,loff] of central){let h=[0x50,0x4b,1,2,...u16(20),...u16(20),0,0,0,0,0,0,...u32(crc),...u32(data.length),...u32(data.length),...u16(nb.length),0,0,0,0,0,0,0,0,...u32(loff),...nb];out.push(...h);off+=h.length}let csize=off-cstart;out.push(0x50,0x4b,5,6,0,0,0,0,...u16(central.length),...u16(central.length),...u32(csize),...u32(cstart),0,0);return new Uint8Array(out)}
+const crcTable=(()=>{let t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();function crc32(a){let c=0xffffffff;for(let b of a)c=crcTable[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0}function u16(n){return[n&255,n>>>8&255]}function u32(n){return[n&255,n>>>8&255,n>>>16&255,n>>>24&255]}function zip(files){
+  const enc=new TextEncoder(), out=[], central=[]; let off=0;
+  for(const [name,content] of files){
+    const nb=enc.encode(name), data=enc.encode(content), crc=crc32(data);
+    const h=[0x50,0x4b,0x03,0x04,
+      ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(nb.length), ...u16(0), ...nb, ...data];
+    out.push(...h); central.push([nb,data,crc,off]); off+=h.length;
+  }
+  const cstart=off;
+  for(const [nb,data,crc,loff] of central){
+    const h=[0x50,0x4b,0x01,0x02,
+      ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(loff),
+      ...nb];
+    out.push(...h); off+=h.length;
+  }
+  out.push(0x50,0x4b,0x05,0x06, ...u16(0), ...u16(0), ...u16(central.length), ...u16(central.length), ...u32(off-cstart), ...u32(cstart), ...u16(0));
+  return new Uint8Array(out);
+}
 function xml(s){return String(s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]))}
 function dl(blob,name){let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1800)}
 function wp(text,opt={}){let size=opt.size||21,color=opt.color||'242521',bold=opt.bold?'<w:b/>':'',caps=opt.caps?'<w:caps/>':'',space=opt.after??110,before=opt.before??0,keep=opt.keep?'<w:keepNext/>':'';return `<w:p><w:pPr>${keep}<w:spacing w:before="${before}" w:after="${space}"/><w:jc w:val="${opt.align||'left'}"/>${opt.border?'<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="7" w:color="B89B67"/></w:pBdr>':''}</w:pPr><w:r><w:rPr>${bold}${caps}<w:color w:val="${color}"/><w:sz w:val="${size}"/><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/></w:rPr><w:t xml:space="preserve">${xml(text||' ')}</w:t></w:r></w:p>`}
