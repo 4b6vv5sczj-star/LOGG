@@ -2,6 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import {v2 as speechV2} from '@google-cloud/speech';
+import {initializeApp as initializeFirebaseApp, applicationDefault} from 'firebase-admin/app';
+import {getAuth} from 'firebase-admin/auth';
+
+initializeFirebaseApp({credential: applicationDefault()});
+const firebaseAuth = getAuth();
 
 const app = express();
 app.disable('x-powered-by');
@@ -26,7 +31,7 @@ const corsOptions = {
     return cb(new Error('Origin not allowed'));
   },
   methods: ['GET','POST','OPTIONS'],
-  allowedHeaders: ['Content-Type'],
+  allowedHeaders: ['Content-Type','Authorization'],
   maxAge: 3600
 };
 app.use(cors(corsOptions));
@@ -58,6 +63,21 @@ function rateLimit(req,res,next){
 }
 setInterval(()=>{const now=Date.now(); for(const [k,b] of buckets) if(now-b.start>RATE_WINDOW_MS*2) buckets.delete(k)}, RATE_WINDOW_MS).unref();
 
+
+const allowedEmails = new Set((process.env.AUTH_ALLOWED_EMAILS || '')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+async function requireIdentity(req,res,next){
+  const header=String(req.get('Authorization')||'');
+  if(!header.startsWith('Bearer ')) return res.status(401).json({error:'Authentication required'});
+  try{
+    const decoded=await firebaseAuth.verifyIdToken(header.slice(7).trim(), true);
+    const email=String(decoded.email||'').toLowerCase();
+    if(!decoded.email_verified) return res.status(403).json({error:'Verified Google account required'});
+    if(allowedEmails.size && !allowedEmails.has(email)) return res.status(403).json({error:'Account not authorized for LOGG'});
+    req.loggUser={uid:decoded.uid,email}; next();
+  }catch(_){ return res.status(401).json({error:'Invalid or expired authentication'}); }
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits:{fileSize:MAX_AUDIO_BYTES, files:1, fields:4}
@@ -66,13 +86,13 @@ const region = process.env.GOOGLE_SPEECH_REGION || 'eu';
 const project = process.env.GOOGLE_CLOUD_PROJECT;
 const client = new speechV2.SpeechClient({apiEndpoint:`${region}-speech.googleapis.com`});
 
-app.get('/',(_,res)=>res.json({ok:true,service:'LOGG Speech',version:'0.10.0'}));
+app.get('/',(_,res)=>res.json({ok:true,service:'LOGG Speech',version:'0.11.0'}));
 app.get('/health',(_,res)=>res.json({
-  ok:true, service:'LOGG Speech', model:'chirp_3', region, version:'0.10.0',
-  projectConfigured:Boolean(project), security:'pilot-hardened'
+  ok:true, service:'LOGG Speech', model:'chirp_3', region, version:'0.11.0',
+  projectConfigured:Boolean(project), security:'identity-platform', authRequired:true, allowlistEnabled:allowedEmails.size>0
 }));
 
-app.post('/api/transcribe', rateLimit, upload.single('audio'), async(req,res)=>{
+app.post('/api/transcribe', rateLimit, requireIdentity, upload.single('audio'), async(req,res)=>{
   try {
     if(!req.file) return res.status(400).json({error:'Missing audio'});
     if(!project) return res.status(500).json({error:'Service configuration error'});
@@ -91,11 +111,11 @@ app.post('/api/transcribe', rateLimit, upload.single('audio'), async(req,res)=>{
     });
     const transcript=(response.results||[]).map(r=>r.alternatives?.[0]?.transcript||'').join(' ').trim();
     const detectedLanguages=[...new Set((response.results||[]).map(r=>r.languageCode).filter(Boolean))];
-    res.json({transcript, detectedLanguages, version:'0.10.0'});
+    res.json({transcript, detectedLanguages, version:'0.11.0'});
   } catch(e) {
     // Keep server-side diagnostics content-free and return a generic client error.
     console.error('STT request failed', {code:String(e?.code ?? 'unknown')});
-    res.status(500).json({error:'Transcription failed', code:String(e?.code ?? 'unknown'), version:'0.10.0'});
+    res.status(500).json({error:'Transcription failed', code:String(e?.code ?? 'unknown'), version:'0.11.0'});
   }
 });
 
@@ -107,4 +127,4 @@ app.use((err,req,res,next)=>{
 });
 
 const port=process.env.PORT||8080;
-app.listen(port,()=>console.log(`LOGG backend v0.10.0 ready; region=${region}; allowedOrigins=${allowedOrigins.size}`));
+app.listen(port,()=>console.log(`LOGG backend v0.11.0 ready; region=${region}; allowedOrigins=${allowedOrigins.size}`));
