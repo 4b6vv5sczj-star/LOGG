@@ -389,26 +389,23 @@ function plain(){let s=current.sections;return `${current.name}\n${fmt(current.s
 $('#copyBtn').onclick=async()=>{await navigator.clipboard.writeText(plain());toast(t('copied'))};
 // Minimal store-only ZIP writer for a dependency-free .docx (OOXML package).
 const crcTable=(()=>{let t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();function crc32(a){let c=0xffffffff;for(let b of a)c=crcTable[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0}function u16(n){return[n&255,n>>>8&255]}function u32(n){return[n&255,n>>>8&255,n>>>16&255,n>>>24&255]}function zip(files){
-  const enc=new TextEncoder(), out=[], central=[]; let off=0;
+  const enc=new TextEncoder(), localParts=[], entries=[]; let offset=0;
+  const le16=n=>new Uint8Array([n&255,(n>>>8)&255]);
+  const le32=n=>new Uint8Array([n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255]);
+  const join=parts=>{const len=parts.reduce((s,p)=>s+p.length,0), out=new Uint8Array(len);let o=0;for(const p of parts){out.set(p,o);o+=p.length}return out};
   for(const [name,content] of files){
-    const nb=enc.encode(name), data=enc.encode(content), crc=crc32(data);
-    const h=[0x50,0x4b,0x03,0x04,
-      ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
-      ...u32(crc), ...u32(data.length), ...u32(data.length),
-      ...u16(nb.length), ...u16(0), ...nb, ...data];
-    out.push(...h); central.push([nb,data,crc,off]); off+=h.length;
+    const nameBytes=enc.encode(name), data=enc.encode(content), crc=crc32(data);
+    const header=join([new Uint8Array([0x50,0x4b,0x03,0x04]),le16(20),le16(0),le16(0),le16(0),le16(0),le32(crc),le32(data.length),le32(data.length),le16(nameBytes.length),le16(0),nameBytes]);
+    localParts.push(header,data); entries.push({nameBytes,data,crc,offset}); offset+=header.length+data.length;
   }
-  const cstart=off;
-  for(const [nb,data,crc,loff] of central){
-    const h=[0x50,0x4b,0x01,0x02,
-      ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
-      ...u32(crc), ...u32(data.length), ...u32(data.length),
-      ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(loff),
-      ...nb];
-    out.push(...h); off+=h.length;
+  const centralStart=offset, centralParts=[];
+  for(const e of entries){
+    const header=join([new Uint8Array([0x50,0x4b,0x01,0x02]),le16(20),le16(20),le16(0),le16(0),le16(0),le16(0),le32(e.crc),le32(e.data.length),le32(e.data.length),le16(e.nameBytes.length),le16(0),le16(0),le16(0),le16(0),le32(0),le32(e.offset),e.nameBytes]);
+    centralParts.push(header); offset+=header.length;
   }
-  out.push(0x50,0x4b,0x05,0x06, ...u16(0), ...u16(0), ...u16(central.length), ...u16(central.length), ...u32(off-cstart), ...u32(cstart), ...u16(0));
-  return new Uint8Array(out);
+  const centralSize=offset-centralStart;
+  const eocd=join([new Uint8Array([0x50,0x4b,0x05,0x06]),le16(0),le16(0),le16(entries.length),le16(entries.length),le32(centralSize),le32(centralStart),le16(0)]);
+  return join([...localParts,...centralParts,eocd]);
 }
 function xml(s){return String(s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]))}
 function dl(blob,name){let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1800)}
@@ -429,7 +426,7 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
 $('#cancelStart').onclick=()=>{$('#startSheet').classList.add('hidden');$('#meetingName').value='';$('#consent').checked=false;window.scrollTo({top:0,behavior:'smooth'});};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.9.0',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.10.3',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
@@ -446,7 +443,7 @@ $('#cancelStart').onclick=()=>{$('#startSheet').classList.add('hidden');$('#meet
   });
 }
 // Purge legacy PWA caches once so iPhone cannot keep executing stale 0.3.x JS.
-(async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-v0.3'))await caches.delete(k)}}catch{}})();
+(async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-') && k!=='logg-v0.10.3')await caches.delete(k)}}catch{}})();
 
 if($('#speechMode')) $('#speechMode').value=localStorage.loggSpeechMode||'auto';
 window.LOGG?.modules?.meetings?.init?.();

@@ -42,26 +42,23 @@ function stopVoice(){clearTimeout(timer);let s=stream;stream=null;if(rec?.state=
 function toggleVoice(){stream?stopVoice():startVoice()}
 function download(blob,name){let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500)}
 const crcTable=(()=>{let t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();function crc32(a){let c=0xffffffff;for(let b of a)c=crcTable[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0}function u16(n){return[n&255,n>>>8&255]}function u32(n){return[n&255,n>>>8&255,n>>>16&255,n>>>24&255]}function zip(files){
-  const enc=new TextEncoder(), out=[], central=[]; let off=0;
+  const enc=new TextEncoder(), localParts=[], entries=[]; let offset=0;
+  const le16=n=>new Uint8Array([n&255,(n>>>8)&255]);
+  const le32=n=>new Uint8Array([n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255]);
+  const join=parts=>{const len=parts.reduce((s,p)=>s+p.length,0), out=new Uint8Array(len);let o=0;for(const p of parts){out.set(p,o);o+=p.length}return out};
   for(const [name,content] of files){
-    const nb=enc.encode(name), data=enc.encode(content), crc=crc32(data);
-    const h=[0x50,0x4b,0x03,0x04,
-      ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
-      ...u32(crc), ...u32(data.length), ...u32(data.length),
-      ...u16(nb.length), ...u16(0), ...nb, ...data];
-    out.push(...h); central.push([nb,data,crc,off]); off+=h.length;
+    const nameBytes=enc.encode(name), data=enc.encode(content), crc=crc32(data);
+    const header=join([new Uint8Array([0x50,0x4b,0x03,0x04]),le16(20),le16(0),le16(0),le16(0),le16(0),le32(crc),le32(data.length),le32(data.length),le16(nameBytes.length),le16(0),nameBytes]);
+    localParts.push(header,data); entries.push({nameBytes,data,crc,offset}); offset+=header.length+data.length;
   }
-  const cstart=off;
-  for(const [nb,data,crc,loff] of central){
-    const h=[0x50,0x4b,0x01,0x02,
-      ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
-      ...u32(crc), ...u32(data.length), ...u32(data.length),
-      ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(loff),
-      ...nb];
-    out.push(...h); off+=h.length;
+  const centralStart=offset, centralParts=[];
+  for(const e of entries){
+    const header=join([new Uint8Array([0x50,0x4b,0x01,0x02]),le16(20),le16(20),le16(0),le16(0),le16(0),le16(0),le32(e.crc),le32(e.data.length),le32(e.data.length),le16(e.nameBytes.length),le16(0),le16(0),le16(0),le16(0),le32(0),le32(e.offset),e.nameBytes]);
+    centralParts.push(header); offset+=header.length;
   }
-  out.push(0x50,0x4b,0x05,0x06, ...u16(0), ...u16(0), ...u16(central.length), ...u16(central.length), ...u32(off-cstart), ...u32(cstart), ...u16(0));
-  return new Uint8Array(out);
+  const centralSize=offset-centralStart;
+  const eocd=join([new Uint8Array([0x50,0x4b,0x05,0x06]),le16(0),le16(0),le16(entries.length),le16(entries.length),le32(centralSize),le32(centralStart),le16(0)]);
+  return join([...localParts,...centralParts,eocd]);
 }
 function xml(s){return String(s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]))}
 function para(text,opt={}){let size=opt.size||21,color=opt.color||'242521',bold=opt.bold?'<w:b/>':'',space=opt.after??100,before=opt.before??0;return `<w:p><w:pPr><w:spacing w:before="${before}" w:after="${space}"/>${opt.border?'<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="7" w:color="B89B67"/></w:pBdr>':''}</w:pPr><w:r><w:rPr>${bold}<w:color w:val="${color}"/><w:sz w:val="${size}"/><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/></w:rPr><w:t xml:space="preserve">${xml(text||' ')}</w:t></w:r></w:p>`}
