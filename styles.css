@@ -65,3 +65,7 @@ body[data-view="archive"] .topbar{display:none}
 
 /* v0.9.5 Meeting Reliability */
 .reliability-status{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.68;margin:7px 0 2px}.reliability-status.warning{opacity:1;font-weight:700}
+
+/* v0.10.1 Export polish */
+.result-actions{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:520px){.result-actions{grid-template-columns:1fr 1fr}.result-actions #pdfBtn{grid-column:1/-1}}

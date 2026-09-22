@@ -43,3 +43,10 @@ No Google credentials are present in the frontend.
 - Recording watchdog monitors microphone/MediaRecorder health and warns if capture appears interrupted.
 - Attempts recorder recovery when returning to LOGG after an interruption.
 - iOS/PWA limitation remains: background/locked-screen microphone capture cannot be guaranteed; LOGG therefore keeps the screen awake where supported.
+
+
+## v0.10.1 Export Polish
+- Premium LOGG Word/PDF stationery for Meetings and Notes.
+- Repeating Word header and restrained footer.
+- Meeting PDF export added.
+- No changes to speech, intelligence, navigation, Home composition, or security backend.
