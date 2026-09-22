@@ -1,6 +1,8 @@
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const I={en:{heroSub:'Speech becomes clarity. Audio never becomes a recording.',newLogg:'Start Meeting LOGG',saved:'Saved meetings',savedKicker:'ARCHIVE',meeting:'MEETING',started:'STARTED',privacy:'Audio is processed live for transcription and is not retained by LOGG.',meetingName:'Meeting name',outputLanguage:'Output language',listening:'Listening',consent:'I have informed participants that LOGG listens to create notes. LOGG does not retain an audio recording.',start:'Begin LOGG',recent:'Recent LOGGs',clear:'Clear',listeningNow:'LISTENING · AUDIO IS NOT SAVED',liveNotes:'Live notes',pause:'Pause',resume:'Resume',finish:'Finish LOGG',completed:'COMPLETED LOGG',copy:'Copy',word:'Export Word',transcriptPlaceholder:'Your live transcript will appear here. You can type or correct text at any time.',empty:'No LOGGs yet.',nameRequired:'Add a meeting name and confirm participant notice.',copied:'Copied',summary:'Summary',decisions:'Decisions',actions:'Actions',questions:'Open Questions',notes:'Meeting Notes',ready:'Ready',unsupported:'Speech recognition is not available in this browser. You can still type notes live.',paused:'Paused',listeningStatus:'Listening'},sv:{heroSub:'Tal blir tydlighet. Ljudet blir aldrig en inspelning.',newLogg:'Starta mötes-LOGG',saved:'Sparade möten',savedKicker:'ARKIV',meeting:'MÖTE',started:'STARTAD',privacy:'Ljud bearbetas live för transkribering och sparas inte av LOGG.',meetingName:'Mötesnamn',outputLanguage:'Output-språk',listening:'Lyssning',consent:'Jag har informerat deltagarna om att LOGG lyssnar för att skapa anteckningar. LOGG sparar ingen ljudinspelning.',start:'Starta LOGG',recent:'Senaste LOGGar',clear:'Rensa',listeningNow:'LYSSNAR · LJUD SPARAS INTE',liveNotes:'Live-anteckningar',pause:'Pausa',resume:'Fortsätt',finish:'Avsluta LOGG',completed:'AVSLUTAD LOGG',copy:'Kopiera',word:'Exportera Word',transcriptPlaceholder:'Din live-transkribering visas här. Du kan skriva eller korrigera text när som helst.',empty:'Inga LOGGar ännu.',nameRequired:'Fyll i mötesnamn och bekräfta att deltagarna informerats.',copied:'Kopierat',summary:'Sammanfattning',decisions:'Beslut',actions:'Åtgärder',questions:'Öppna frågor',notes:'Mötesanteckningar',ready:'Klar',unsupported:'Taligenkänning stöds inte i denna webbläsare. Du kan fortfarande skriva anteckningar live.',paused:'Pausad',listeningStatus:'Lyssnar'}};
 let ui=localStorage.loggUi||'en', current=null, tick=null, recognition=null, paused=false, finalText='';
+const SPEECH_LANGS=new Set(['sv-SE','en-GB','fi-FI','es-ES']);
+let speechLang={mode:'auto',locked:null,candidate:null,score:0};
 function t(k){return I[ui][k]||k} function toast(x){$('#toast').textContent=x;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),1800)}
 function applyLang(){document.documentElement.lang=ui;$$('[data-i18n]').forEach(e=>e.textContent=t(e.dataset.i18n));$$('[data-i18n-placeholder]').forEach(e=>e.placeholder=t(e.dataset.i18nPlaceholder));$('#uiLang').textContent=ui==='en'?'SV':'EN';renderRecent()}
 $('#uiLang').onclick=()=>{ui=ui==='en'?'sv':'en';localStorage.loggUi=ui;applyLang()};
@@ -10,7 +12,8 @@ function getLogs(){try{return JSON.parse(localStorage.loggLogs||'[]')}catch{retu
 function renderRecent(){let x=getLogs(),el=$('#recentList');el.innerHTML=x.length?x.slice().reverse().slice(0,8).map(l=>`<div class="recent-item" data-id="${l.id}"><div><div class="recent-title">${esc(l.name)}</div><div class="recent-meta">${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}</div></div><div>›</div></div>`).join(''):`<div class="empty">${t('empty')}</div>`;$$('.recent-item').forEach(e=>e.onclick=()=>openLog(e.dataset.id))}
 function esc(s=''){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 $('#clearAll').onclick=()=>{if(confirm(ui==='sv'?'Rensa alla lokalt sparade LOGGar?':'Clear all locally saved LOGGs?')){saveLogs([]);renderRecent()}};
-$('#startBtn').onclick=()=>{let name=$('#meetingName').value.trim();if(!name||!$('#consent').checked){toast(t('nameRequired'));return}current={id:Date.now().toString(),name,start:Date.now(),end:null,output:$('#outputLang').value,transcript:'',sections:null};finalText='';$('#transcript').value='';$('#liveTitle').textContent=name;$('#liveDate').textContent=fmt(current.start);goTo('live');startTimer();startSpeech()};
+$('#startBtn').onclick=()=>{let name=$('#meetingName').value.trim();if(!name||!$('#consent').checked){toast(t('nameRequired'));return}speechLang={mode:$('#speechMode')?.value||'auto',locked:null,candidate:null,score:0}; localStorage.loggSpeechMode=speechLang.mode;
+current={id:Date.now().toString(),name,start:Date.now(),end:null,output:$('#outputLang').value,speechMode:speechLang.mode,transcript:'',sections:null};finalText='';$('#transcript').value='';$('#liveTitle').textContent=name;$('#liveDate').textContent=fmt(current.start);goTo('live');startTimer();startSpeech()};
 function startTimer(){clearInterval(tick);let f=()=>$('#timer').textContent=duration(Date.now()-current.start);f();tick=setInterval(f,1000)}
 function speechDetail(msg=''){const el=$('#speechDetail');if(el)el.textContent=msg}
 let recorder=null, stream=null, chunks=[], uploadBusy=false, chunkTimer=null, audioCtx=null, analyser=null, meterRAF=null, stopping=false, chunkBytes=0, chunkCount=0, finishFlush=false, finishWaiter=null;
@@ -105,14 +108,41 @@ function beginRecorder(type){
     },8000);
   }catch(e){diag('RECORDER CREATE ERROR '+e.message);throw e}
 }
+function normalizeDetectedLanguage(code=''){
+  const c=String(code).toLowerCase();
+  if(c.startsWith('sv')) return 'sv-SE';
+  if(c.startsWith('en')) return 'en-GB';
+  if(c.startsWith('fi')) return 'fi-FI';
+  if(c.startsWith('es')) return 'es-ES';
+  return null; // German and unrelated detections never become a LOGG lock.
+}
+function observeLanguage(codes=[]){
+  if(speechLang.mode!=='auto' || speechLang.locked) return;
+  const lang=normalizeDetectedLanguage(codes[0]);
+  if(!lang) return;
+  if(speechLang.candidate===lang) speechLang.score += (lang==='sv-SE'?2:1);
+  else { speechLang.candidate=lang; speechLang.score=(lang==='sv-SE'?2:1); }
+  // Swedish locks quickly; other supported languages need repeated evidence.
+  const threshold=lang==='sv-SE'?3:3;
+  if(speechLang.score>=threshold){ speechLang.locked=lang; diag('LANG LOCK '+lang); }
+}
+function activeSpeechHint(){
+  if(speechLang.mode!=='auto' && SPEECH_LANGS.has(speechLang.mode)) return speechLang.mode;
+  return speechLang.locked||'';
+}
+function languageLabel(){
+  const x=activeSpeechHint();
+  if(!x) return ui==='sv'?'Smart auto · SV/FI/EN/ES':'Smart auto · SV/FI/EN/ES';
+  return 'LOCK · '+x;
+}
 async function sendChunk(blob,base,type){
   if(uploadBusy){diag('UPLOAD BUSY · skipped');return} if(blob.size<800){diag('AUDIO <800B · skipped');return} uploadBusy=true; diag('UPLOADING '+Math.round(blob.size/1024)+' KB');
   try{
     $('#speechStatus').textContent=ui==='sv'?'Transkriberar…':'Transcribing…';
     const ext=type.includes('mp4')?'m4a':type.includes('webm')?'webm':'audio';
-    let fd=new FormData(); fd.append('audio',blob,'chunk.'+ext); fd.append('phrases',JSON.stringify(MARINE_HINTS));
+    let fd=new FormData(); fd.append('audio',blob,'chunk.'+ext); fd.append('phrases',JSON.stringify(MARINE_HINTS)); const hint=activeSpeechHint(); if(hint) fd.append('languageHint',hint);
     let r=await fetch(base+'/api/transcribe',{method:'POST',body:fd}); diag('GOOGLE HTTP '+r.status);
-    if(!r.ok) throw Error(await r.text()); let j=await r.json();
+    if(!r.ok) throw Error(await r.text()); let j=await r.json(); observeLanguage(j.detectedLanguages||[]); speechDetail('Google Chirp 3 · '+languageLabel()+' · '+type.replace('audio/','').toUpperCase());
     if(j.transcript){diag('TEXT ✓ '+j.transcript.length+' chars'); finalText=(finalText.trim()+' '+j.transcript.trim()).trim(); $('#transcript').value=finalText; current.transcript=finalText; localStorage.loggDraft=JSON.stringify(current); }
     $('#speechStatus').textContent=ui==='sv'?'Lyssnar':'Listening';
   }catch(e){ console.error(e); diag('ERROR '+(e.message||e)); $('#speechStatus').textContent=ui==='sv'?'Google-fel':'Google error'; speechDetail(e.message||'Transcription failed'); }finally{uploadBusy=false}
@@ -339,7 +369,7 @@ $('#wordBtn').onclick=()=>{let s=current.sections,body=p('LOGG',true,34)+p('MEET
 $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.7.2',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.8.0',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
@@ -358,4 +388,6 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
 // Purge legacy PWA caches once so iPhone cannot keep executing stale 0.3.x JS.
 (async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-v0.3'))await caches.delete(k)}}catch{}})();
 
-goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.7.2 · '+navigator.userAgent.slice(0,55)),50);
+if($('#speechMode')) $('#speechMode').value=localStorage.loggSpeechMode||'auto';
+window.LOGG?.modules?.meetings?.init?.();
+goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.8.0 · '+navigator.userAgent.slice(0,55)),50);

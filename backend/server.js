@@ -12,9 +12,9 @@ const region = process.env.GOOGLE_SPEECH_REGION || 'eu';
 const project = process.env.GOOGLE_CLOUD_PROJECT;
 const client = new speechV2.SpeechClient({apiEndpoint:`${region}-speech.googleapis.com`});
 
-app.get('/',(_,res)=>res.json({ok:true,service:'LOGG Speech',version:'0.5.0'}));
+app.get('/',(_,res)=>res.json({ok:true,service:'LOGG Speech',version:'0.8.0'}));
 app.get('/health',(_,res)=>res.json({
-  ok:true, service:'LOGG Speech', model:'chirp_3', region, version:'0.5.0',
+  ok:true, service:'LOGG Speech', model:'chirp_3', region, version:'0.8.0',
   projectConfigured:Boolean(project), endpoint:`${region}-speech.googleapis.com`
 }));
 
@@ -24,15 +24,16 @@ app.post('/api/transcribe', upload.single('audio'), async(req,res)=>{
     if(!project) return res.status(500).send('GOOGLE_CLOUD_PROJECT missing');
 
     const recognizer = `projects/${project}/locations/${region}/recognizers/_`;
-    console.log('STT request', {recognizer, endpoint:`${region}-speech.googleapis.com`, bytes:req.file.size, mime:req.file.mimetype});
+    console.log('STT request', {recognizer, endpoint:`${region}-speech.googleapis.com`, bytes:req.file.size, mime:req.file.mimetype, languageHint:req.body?.languageHint||'auto'});
 
-    // Keep this first live test deliberately minimal. Once base transcription is
-    // verified, LOGG Marine Lexicon/adaptation can be re-enabled separately.
+    const allowedHints=new Set(['sv-SE','en-GB','fi-FI','es-ES']);
+    const requestedHint=String(req.body?.languageHint||'');
+    const languageCodes=allowedHints.has(requestedHint)?[requestedHint]:['auto'];
     const [response] = await client.recognize({
       recognizer,
       config:{
         autoDecodingConfig:{},
-        languageCodes:['auto'],
+        languageCodes,
         model:'chirp_3',
         features:{enableAutomaticPunctuation:true}
       },
@@ -43,14 +44,14 @@ app.post('/api/transcribe', upload.single('audio'), async(req,res)=>{
       .map(r=>r.alternatives?.[0]?.transcript||'')
       .join(' ').trim();
     const detectedLanguages=[...new Set((response.results||[]).map(r=>r.languageCode).filter(Boolean))];
-    res.json({transcript, detectedLanguages, version:'0.5.0'});
+    res.json({transcript, detectedLanguages, version:'0.8.0'});
   } catch(e) {
     console.error('STT ERROR', e);
     const code=e?.code ?? 'unknown';
     const details=e?.details || e?.message || 'Transcription failed';
-    res.status(500).json({error:String(details), code:String(code), region, version:'0.5.0'});
+    res.status(500).json({error:String(details), code:String(code), region, version:'0.8.0'});
   }
 });
 
 const port=process.env.PORT||8080;
-app.listen(port,()=>console.log(`LOGG backend v0.5.0 on ${port}; STT=${region}-speech.googleapis.com`));
+app.listen(port,()=>console.log(`LOGG backend v0.8.0 on ${port}; STT=${region}-speech.googleapis.com`));

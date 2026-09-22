@@ -44,7 +44,7 @@ body[data-view="archive"] .topbar{display:none}
 .hero-copy{max-width:640px}.hero-copy p{font-size:13.5px;letter-spacing:.005em}.ghost-start{transition:padding .2s ease,border-color .2s ease}.ghost-start:active{padding-left:5px;padding-right:5px}
 @media(max-width:420px){.intelligence-note{align-items:flex-start;flex-direction:column;gap:4px}.intelligence-note b{text-align:left}.stationery{padding-left:20px;padding-right:20px}}
 
-/* v0.7.2 Home Composition Polish — visual only; upper hero/core frozen. */
+/* v0.8.0 Home Composition Polish — visual only; upper hero/core frozen. */
 /* The yacht image is deliberately OUTSIDE .hero-copy so it cannot compress or reposition the upper home composition. */
 #home{background:#11120f;min-height:100dvh;overflow:hidden}
 #home>.hero-photo{height:70dvh;min-height:570px;flex:none}
