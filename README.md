@@ -29,3 +29,8 @@ No Google credentials are present in the frontend.
 - Cancelling returns to the locked Home screen without creating a meeting.
 - Clears unstarted meeting name and consent state.
 - Notes, Speech, Meetings runtime and Home composition otherwise unchanged.
+
+
+## v0.9.4 Notes usability
+- Explicit SAVED NOTES archive entry inside Notes.
+- Enter continues bullet and TODO lists automatically; Enter on an empty list item exits the list.

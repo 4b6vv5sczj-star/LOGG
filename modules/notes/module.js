@@ -1,6 +1,6 @@
 (function(){
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-const VERSION='1.0.2'; let active=null, rec=null, stream=null, timer=null, busy=false, lang={locked:null,candidate:null,score:0};
+const VERSION='1.0.3'; let active=null, rec=null, stream=null, timer=null, busy=false, lang={locked:null,candidate:null,score:0};
 const store=()=>{try{return JSON.parse(localStorage.loggNotes||'[]')}catch{return[]}};
 const saveStore=x=>localStorage.loggNotes=JSON.stringify(x);
 const esc=s=>String(s??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -12,6 +12,25 @@ function loadEditor(){if(!active)return;$('#noteTitle').value=active.title||'';$
 function persist(silent=true){if(!active)return;active.title=$('#noteTitle').value.trim();active.body=$('#noteBody').value;active.updated=Date.now();if(!active.title&&!active.body.trim())return;let x=store(),i=x.findIndex(n=>n.id===active.id);if(i>=0)x[i]=active;else x.push(active);saveStore(x);if(!silent&&window.toast)toast('Saved')}
 function list(){let x=store().slice().sort((a,b)=>b.updated-a.updated),el=$('#notesList');el.innerHTML=x.length?x.map(n=>`<div class="recent-item note-item" data-id="${n.id}"><div><div class="recent-title">${esc(n.title||'Untitled note')}</div><div class="recent-meta">${fmt(n.updated)} · ${esc((n.body||'').replace(/^[•☐\-]\s*/gm,'').slice(0,72))}</div></div><div>›</div></div>`).join(''):'<div class="empty">No notes yet.</div>';$$('.note-item').forEach(e=>e.onclick=()=>{active=store().find(n=>n.id===e.dataset.id);loadEditor();view('notes')})}
 function insertPrefix(prefix){let a=$('#noteBody'),start=a.selectionStart,end=a.selectionEnd,val=a.value,before=val.slice(0,start),sel=val.slice(start,end)||'',after=val.slice(end);let atLine=start===0||before.endsWith('\n');let ins=(atLine?'':'\n')+prefix+(sel||'');a.value=before+ins+after;a.focus();a.selectionStart=a.selectionEnd=before.length+ins.length;persist()}
+function continueListOnEnter(e){
+  if(e.key!=='Enter'||e.shiftKey||e.altKey||e.ctrlKey||e.metaKey)return;
+  const a=e.currentTarget,start=a.selectionStart,end=a.selectionEnd;
+  if(start!==end)return;
+  const before=a.value.slice(0,start), line=before.slice(before.lastIndexOf('\n')+1);
+  const m=line.match(/^(\s*)(• |☐ |☑ |- )/);
+  if(!m)return;
+  e.preventDefault();
+  // Empty list item: Enter once exits the list instead of creating endless blank bullets.
+  if(line.slice(m[0].length).trim()===''){
+    const lineStart=before.lastIndexOf('\n')+1;
+    a.value=a.value.slice(0,lineStart)+a.value.slice(start);
+    a.selectionStart=a.selectionEnd=lineStart;
+  }else{
+    const prefix=m[1]+(m[2]==='☑ '?'☐ ':m[2]);
+    a.setRangeText('\n'+prefix,start,end,'end');
+  }
+  persist();
+}
 function voiceState(s){let e=$('#noteVoiceState');if(e)e.textContent=s}
 function norm(code=''){code=String(code).toLowerCase();if(code.startsWith('sv'))return'sv-SE';if(code.startsWith('en'))return'en-GB';if(code.startsWith('fi'))return'fi-FI';if(code.startsWith('es'))return'es-ES';return null}
 function observe(codes=[]){if(lang.locked)return;let l=norm(codes[0]);if(!l)return;if(lang.candidate===l)lang.score+=(l==='sv-SE'?2:1);else{lang.candidate=l;lang.score=l==='sv-SE'?2:1}if(lang.score>=3)lang.locked=l}
@@ -39,6 +58,6 @@ function installNotesSwipe(){
   bind('#notesLibrary .stationery',()=>view('home'));
   bind('#noteExportSheet',closeExport);
 }
-function init(){document.documentElement.dataset.notesModule=VERSION;$('#openNotes').onclick=fresh;$('#backNotes').onclick=notesHome;$('#notesLibraryBtn').onclick=()=>{stopVoice();persist();list();view('notesLibrary')};$('#backNotesLibrary').onclick=()=>view('home');$('#newNoteBtn').onclick=fresh;$('#noteBulletBtn').onclick=()=>insertPrefix('• ');$('#noteCheckBtn').onclick=()=>insertPrefix('☐ ');$('#noteVoiceBtn').onclick=toggleVoice;$('#noteSaveBtn').onclick=()=>{persist(false);list()};$('#noteExportBtn').onclick=()=>{persist();$('#noteExportSheet').hidden=false};$('#noteExportCancel').onclick=closeExport;$('#noteExportClose').onclick=closeExport;$('#noteExportSheet').addEventListener('click',e=>{if(e.target.id==='noteExportSheet')closeExport()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeExport()});$$('[data-note-export]').forEach(b=>b.onclick=()=>{let k=b.dataset.noteExport;closeExport();requestAnimationFrame(()=>{k==='docx'?exportDocx():k==='json'?exportJson():exportPdf()})});let autosave=()=>persist();$('#noteTitle').addEventListener('input',autosave);$('#noteBody').addEventListener('input',autosave);installNotesSwipe();}
+function init(){document.documentElement.dataset.notesModule=VERSION;$('#openNotes').onclick=fresh;$('#backNotes').onclick=notesHome;$('#notesLibraryBtn').onclick=()=>{stopVoice();persist();list();view('notesLibrary')};$('#backNotesLibrary').onclick=()=>view('home');$('#newNoteBtn').onclick=fresh;$('#noteBulletBtn').onclick=()=>insertPrefix('• ');$('#noteCheckBtn').onclick=()=>insertPrefix('☐ ');$('#noteVoiceBtn').onclick=toggleVoice;$('#noteSaveBtn').onclick=()=>{persist(false);list()};$('#noteExportBtn').onclick=()=>{persist();$('#noteExportSheet').hidden=false};$('#noteExportCancel').onclick=closeExport;$('#noteExportClose').onclick=closeExport;$('#noteExportSheet').addEventListener('click',e=>{if(e.target.id==='noteExportSheet')closeExport()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeExport()});$$('[data-note-export]').forEach(b=>b.onclick=()=>{let k=b.dataset.noteExport;closeExport();requestAnimationFrame(()=>{k==='docx'?exportDocx():k==='json'?exportJson():exportPdf()})});let autosave=()=>persist();$('#noteTitle').addEventListener('input',autosave);$('#noteBody').addEventListener('input',autosave);$('#noteBody').addEventListener('keydown',continueListOnEnter);installNotesSwipe();}
 LOGG.registerModule('notes',{version:VERSION,status:'active',capabilities:['voice','typed','bullets','checklist','export-docx','export-pdf','export-json'],init});
 })();
