@@ -1,20 +1,19 @@
-# LOGG v0.8.0 — Modular Foundation + Speech Intelligence
+# LOGG v0.9.0 — Notes 1.0
 
-Built directly from the verified v0.7.2 Home baseline.
+Built on the frozen v0.8 modular/speech baseline.
 
-## Frozen
-- v0.5.2 core flow/navigation
-- v0.7.2 Home composition and sailing lifestyle image
+## Frozen and preserved
+- Meetings module / navigation / Chirp pipeline from v0.8
+- v0.7.2 Home visual composition, with only a discreet Quick Notes module entry added
 
-## New
-- Module registry under `/core` and `/modules`.
-- Meetings registered as the active module.
-- Notes foundation registered but deliberately has no visible UI yet.
-- Speech selector: Smart auto, Swedish, English, Finnish, Spanish.
-- Smart auto only permits SV/FI/EN/ES to become persistent language locks; German/unrelated detections are ignored for locking.
-- Swedish gains lock confidence faster to reduce accidental drift from Swedish speech.
-- Once locked, the frontend sends a specific BCP-47 language hint to Cloud Run for subsequent chunks.
-- Backend accepts only sv-SE, en-GB, fi-FI, es-ES hints; otherwise it retains Chirp 3 auto mode.
+## Notes 1.0
+- Independent Notes module and local Notes library
+- Typed notes, bullet insertion and checklist insertion
+- Voice capture through the same Cloud Run / Google Chirp 3 endpoint
+- Smart language stability limited to SV/FI/EN/ES; Swedish locks quickly and unrelated languages never lock
+- Voice transcription is appended as clean bullet points
+- Local autosave; audio is never stored by LOGG
+- Export: Word (.docx), PDF via the device print/save-PDF sheet, and JSON
+- Premium LOGG document header in Word/PDF exports
 
-## Next
-Build Notes as an independent module and move export into a shared Core export service.
+No Google credentials are present in the frontend.

@@ -369,7 +369,7 @@ $('#wordBtn').onclick=()=>{let s=current.sections,body=p('LOGG',true,34)+p('MEET
 $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTimeout(()=>$('#startSheet').scrollIntoView({behavior:'smooth',block:'start'}),50)};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.8.0',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.9.0',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
@@ -390,4 +390,5 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
 
 if($('#speechMode')) $('#speechMode').value=localStorage.loggSpeechMode||'auto';
 window.LOGG?.modules?.meetings?.init?.();
-goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.8.0 · '+navigator.userAgent.slice(0,55)),50);
+window.LOGG?.modules?.notes?.init?.();
+goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.9.0 · '+navigator.userAgent.slice(0,55)),50);
