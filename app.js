@@ -426,7 +426,7 @@ $('#revealStart').onclick=()=>{$('#startSheet').classList.remove('hidden');setTi
 $('#cancelStart').onclick=()=>{$('#startSheet').classList.add('hidden');$('#meetingName').value='';$('#consent').checked=false;window.scrollTo({top:0,behavior:'smooth'});};if('serviceWorker' in navigator){
   window.addEventListener('load', async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=0.10.3',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=0.10.5',{updateViaCache:'none'});
       await reg.update();
       if(reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
@@ -443,7 +443,7 @@ $('#cancelStart').onclick=()=>{$('#startSheet').classList.add('hidden');$('#meet
   });
 }
 // Purge legacy PWA caches once so iPhone cannot keep executing stale 0.3.x JS.
-(async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-') && k!=='logg-v0.10.4')await caches.delete(k)}}catch{}})();
+(async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-') && k!=='logg-v0.10.5')await caches.delete(k)}}catch{}})();
 
 if($('#speechMode')) $('#speechMode').value=localStorage.loggSpeechMode||'auto';
 window.LOGG?.modules?.meetings?.init?.();
