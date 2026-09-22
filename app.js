@@ -443,9 +443,21 @@ $('#cancelStart').onclick=()=>{$('#startSheet').classList.add('hidden');$('#meet
   });
 }
 // Purge legacy PWA caches once so iPhone cannot keep executing stale 0.3.x JS.
-(async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-') && k!=='logg-v0.10.3')await caches.delete(k)}}catch{}})();
+(async()=>{try{if('caches'in window){for(const k of await caches.keys())if(k.startsWith('logg-') && k!=='logg-v0.10.4')await caches.delete(k)}}catch{}})();
 
 if($('#speechMode')) $('#speechMode').value=localStorage.loggSpeechMode||'auto';
 window.LOGG?.modules?.meetings?.init?.();
 window.LOGG?.modules?.notes?.init?.();
 goTo('home');applyLang();renderRecent(); setTimeout(()=>diag('JS ✓ v0.9.3 · '+navigator.userAgent.slice(0,55)),50);
+
+
+// v0.10.4 · How-to / pilot security sheet. Deliberately isolated from Core/Meetings/Notes.
+(()=>{
+ const sheet=document.getElementById('helpSheet'), open=document.getElementById('openHelp');
+ const close=()=>{if(sheet) sheet.hidden=true};
+ if(open&&sheet) open.addEventListener('click',()=>{sheet.hidden=false});
+ document.getElementById('closeHelp')?.addEventListener('click',close);
+ document.getElementById('helpDone')?.addEventListener('click',close);
+ sheet?.addEventListener('click',e=>{if(e.target===sheet)close()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sheet&&!sheet.hidden)close()});
+})();
