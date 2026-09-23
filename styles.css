@@ -83,3 +83,7 @@ body[data-view="archive"] .topbar{display:none}
 
 /* v0.11.1 Identity iOS diagnostics */
 .auth-status{margin-top:14px;font-size:12px;line-height:1.45;letter-spacing:.02em;opacity:.68;overflow-wrap:anywhere}.auth-status.auth-error{opacity:.9}.auth-card .primary:disabled{opacity:.55;cursor:wait}
+
+.result-actions #geminiBtn{grid-column:1/-1}.result-actions #geminiBtn[hidden],#geminiPreview[hidden]{display:none}#geminiStatus{line-height:1.6;margin:12px 0;color:var(--taupe)}#geminiPreview{margin:18px 0 24px;padding:18px;border:1px solid var(--line);background:var(--paper)}#geminiPreview .section-card:first-child{border-top:0}#geminiPreview .section-card{padding:14px 0}#geminiPreview textarea{width:100%;background:transparent}
+
+#rawTranscript{border-top:1px solid var(--line);margin-top:20px;padding:18px 0}#rawTranscript summary{cursor:pointer;font-size:12px;color:var(--taupe)}#rawTranscript textarea{width:100%;min-height:180px;margin-top:12px;line-height:1.6}

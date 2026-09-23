@@ -52,7 +52,8 @@ $('#startBtn').onclick=async()=>{if(!(await requireLoggUser()))return;let name=$
 current={id:Date.now().toString(),name,start:Date.now(),end:null,output:$('#outputLang').value,speechMode:speechLang.mode,transcript:'',sections:null};finalText='';$('#transcript').value='';$('#liveTitle').textContent=name;$('#liveDate').textContent=fmt(current.start);goTo('live');startTimer();requestMeetingWakeLock();startReliabilityWatch();startSpeech()};
 function startTimer(){clearInterval(tick);let f=()=>$('#timer').textContent=duration(Date.now()-current.start);f();tick=setInterval(f,1000)}
 function speechDetail(msg=''){const el=$('#speechDetail');if(el)el.textContent=msg}
-let recorder=null, stream=null, chunks=[], uploadBusy=false, chunkTimer=null, audioCtx=null, analyser=null, meterRAF=null, stopping=false, chunkBytes=0, chunkCount=0, finishFlush=false, finishWaiter=null;
+let recorder=null, stream=null, chunkTimer=null, audioCtx=null, analyser=null, meterRAF=null, stopping=false, finishFlush=false, finishWaiter=null;
+let uploadQueue=Promise.resolve();
 let wakeLock=null, reliabilityTimer=null, lastAudioAt=0, reliabilityWarned=false, captureStarted=false, segmentTransitionAt=0;
 function reliabilityText(msg,warning=false){const el=$('#reliabilityStatus');if(!el)return;el.textContent=msg;el.classList.toggle('warning',!!warning)}
 async function requestMeetingWakeLock(){
@@ -82,7 +83,7 @@ function startReliabilityWatch(){clearInterval(reliabilityTimer);lastAudioAt=0;r
   }else if(reliabilityWarned){reliabilityWarned=false;reliabilityText(ui==='sv'?'● Lyssnar · Skärmen hålls vaken':'● Listening · Screen awake');}
 },5000)}
 function stopReliabilityWatch(){clearInterval(reliabilityTimer);reliabilityTimer=null;reliabilityWarned=false}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&current&&!current.end&&!paused){requestMeetingWakeLock();if(!stream||!stream.active||!recorder||recorder.state==='inactive'){diag('VISIBLE · recorder recovery');stopping=false;startSpeech();}}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&current&&!current.end&&!paused){requestMeetingWakeLock();if(!stream||!stream.active||(!segmentTransitionAt&&(!recorder||recorder.state==='inactive'))){diag('VISIBLE · recorder recovery');stopping=false;startSpeech();}}});
 const DEBUG=new URLSearchParams(location.search).get('debug')==='1'; if(DEBUG) document.documentElement.classList.add('debug-mode');
 function diag(msg){const el=$('#diagnostics');if(DEBUG&&el){const stamp=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});el.textContent=stamp+' · '+msg+'\n'+el.textContent.split('\n').slice(0,5).join('\n')}}
 const MARINE_HINTS=[
@@ -143,37 +144,42 @@ async function startSpeech(){
 function beginRecorder(type){
   if(!stream||stopping)return;
   try{
-    recorder=new MediaRecorder(stream,{mimeType:type}); chunks=[]; chunkBytes=0; chunkCount=0;
-    recorder.onerror=e=>diag('RECORDER ERROR '+(e.error?.message||e.error?.name||'unknown'));
-    recorder.onstart=()=>{captureStarted=true;segmentTransitionAt=0;lastAudioAt=Date.now();diag('RECORDING ✓')};
-    recorder.ondataavailable=e=>{if(e.data&&e.data.size){lastAudioAt=Date.now();chunks.push(e.data);chunkBytes+=e.data.size;chunkCount++;diag('AUDIO '+chunkCount+' chunks · '+Math.round(chunkBytes/1024)+' KB')}};
-    recorder.onstop=async()=>{
+    const recordingStream=stream;
+    const activeRecorder=new MediaRecorder(recordingStream,{mimeType:type}); recorder=activeRecorder;
+    const recordingMeetingId=current?.id;
+    let segmentChunks=[], segmentBytes=0, segmentCount=0;
+    activeRecorder.onerror=e=>diag('RECORDER ERROR '+(e.error?.message||e.error?.name||'unknown'));
+    activeRecorder.onstart=()=>{captureStarted=true;segmentTransitionAt=0;lastAudioAt=Date.now();diag('RECORDING ✓')};
+    activeRecorder.ondataavailable=e=>{if(e.data&&e.data.size){lastAudioAt=Date.now();segmentChunks.push(e.data);segmentBytes+=e.data.size;segmentCount++;diag('AUDIO '+segmentCount+' chunks · '+Math.round(segmentBytes/1024)+' KB')}};
+    activeRecorder.onstop=()=>{
       clearTimeout(chunkTimer);
-      const blob=new Blob(chunks,{type}); chunks=[];
+      const blob=new Blob(segmentChunks,{type}); segmentChunks=[];
       diag('STOP ✓ · '+Math.round(blob.size/1024)+' KB');
-      try{
-        if(finishFlush){
-          finishFlush=false;
-          if(blob.size>=800) await sendChunk(blob,(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,''),type);
-        }else if(!stopping&&!paused&&current&&!current.end){
-          if(blob.size<800){diag('AUDIO TOO SMALL · restarting'); setTimeout(()=>beginRecorder(type),250); return;}
-          await sendChunk(blob,(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,''),type);
-          if(!stopping&&!paused&&current&&!current.end)setTimeout(()=>beginRecorder(type),150);
-        }
-      }finally{
-        if(finishWaiter){const done=finishWaiter;finishWaiter=null;done();}
+      const finishing=finishFlush; finishFlush=false;
+      const shouldSend=(finishing||activeRecorder.flushOnStop||(!stopping&&!paused&&current&&!current.end))&&current?.id===recordingMeetingId;
+      if(shouldSend&&blob.size>=800) queueChunk(blob,type,recordingMeetingId);
+      else if(shouldSend) diag('AUDIO TOO SMALL');
+      // Resume capture before waiting for Speech, so network latency loses no speech.
+      if(!finishing&&!stopping&&!paused&&stream===recordingStream&&current?.id===recordingMeetingId&&!current.end){
+        try{beginRecorder(type)}catch(e){diag('RECORDER RESTART ERROR '+e.message)}
       }
+      if(finishWaiter){const done=finishWaiter;finishWaiter=null;done();}
     };
-    recorder.start(1000);
+    activeRecorder.start(1000);
     chunkTimer=setTimeout(()=>{
       diag('8s · STOP REQUEST');
-      if(recorder?.state==='recording'){
+      if(activeRecorder.state==='recording'){
         segmentTransitionAt=Date.now();
-        try{recorder.requestData()}catch(_){}
-        setTimeout(()=>{if(recorder?.state==='recording')recorder.stop()},150);
+        try{activeRecorder.requestData()}catch(_){}
+        setTimeout(()=>{if(activeRecorder.state==='recording')activeRecorder.stop()},150);
       }
     },8000);
   }catch(e){diag('RECORDER CREATE ERROR '+e.message);throw e}
+}
+function queueChunk(blob,type,meetingId){
+  const base=(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,'');
+  uploadQueue=uploadQueue.then(()=>sendChunk(blob,base,type,meetingId)).catch(e=>diag('UPLOAD ERROR '+(e.message||e)));
+  return uploadQueue;
 }
 function normalizeDetectedLanguage(code=''){
   const c=String(code).toLowerCase();
@@ -186,54 +192,49 @@ function normalizeDetectedLanguage(code=''){
 function observeLanguage(codes=[]){
   if(speechLang.mode!=='auto') return;
   const lang=normalizeDetectedLanguage(codes[0]);
-  if(!lang) return; // German/other one-off guesses can never take over LOGG.
+  if(!lang) return;
   speechLang.chunks=(speechLang.chunks||0)+1;
   speechLang.history=[...(speechLang.history||[]),lang].slice(-6);
-  if(speechLang.locked) return; // A meeting lock is intentionally sticky for stability.
-
-  // Hysteresis: Swedish gets a small prior because LOGG is currently used mainly in
-  // Finland-Swedish meetings. FI/EN/ES need repeated, consistent evidence.
-  const recent=speechLang.history;
-  const counts=recent.reduce((m,x)=>(m[x]=(m[x]||0)+1,m),{});
-  const required=lang==='sv-SE'?2:3;
-  if((counts[lang]||0)>=required && recent.slice(-required).every(x=>x===lang)){
-    speechLang.locked=lang;
-    speechLang.candidate=lang;
-    speechLang.score=counts[lang];
-    diag('LANG LOCK '+lang+' after '+speechLang.chunks+' chunks');
-    return;
-  }
   speechLang.candidate=lang;
-  speechLang.score=counts[lang]||1;
+  diag('LANG '+lang+' in segment '+speechLang.chunks);
 }
 function activeSpeechHint(){
   if(speechLang.mode!=='auto' && SPEECH_LANGS.has(speechLang.mode)) return speechLang.mode;
-  return speechLang.locked||'';
+  return ''; // Keep automatic recognition active for multilingual meetings.
 }
 function languageLabel(){
   const x=activeSpeechHint();
   if(!x) return ui==='sv'?'Smart auto · SV/FI/EN/ES':'Smart auto · SV/FI/EN/ES';
   return 'LOCK · '+x;
 }
-async function sendChunk(blob,base,type){
-  if(uploadBusy){diag('UPLOAD BUSY · skipped');return} if(blob.size<800){diag('AUDIO <800B · skipped');return} uploadBusy=true; diag('UPLOADING '+Math.round(blob.size/1024)+' KB');
+async function sendChunk(blob,base,type,meetingId){
+  if(blob.size<800||current?.id!==meetingId)return;
+  diag('UPLOADING '+Math.round(blob.size/1024)+' KB');
   try{
     $('#speechStatus').textContent=ui==='sv'?'Transkriberar…':'Transcribing…';
     const ext=type.includes('mp4')?'m4a':type.includes('webm')?'webm':'audio';
     let fd=new FormData(); fd.append('audio',blob,'chunk.'+ext); fd.append('phrases',JSON.stringify(MARINE_HINTS)); const hint=activeSpeechHint(); if(hint) fd.append('languageHint',hint);
     const headers=await authHeaders(); let r=await fetch(base+'/api/transcribe',{method:'POST',headers,body:fd}); diag('GOOGLE HTTP '+r.status);
-    if(!r.ok) throw Error(await r.text()); let j=await r.json(); observeLanguage(j.detectedLanguages||[]); speechDetail('Google Chirp 3 · '+languageLabel()+' · '+type.replace('audio/','').toUpperCase());
-    if(j.transcript){diag('TEXT ✓ '+j.transcript.length+' chars'); finalText=(finalText.trim()+' '+j.transcript.trim()).trim(); $('#transcript').value=finalText; current.transcript=finalText; localStorage.loggDraft=JSON.stringify(current); }
-    $('#speechStatus').textContent=ui==='sv'?'Lyssnar':'Listening';
-  }catch(e){ console.error(e); diag('ERROR '+(e.message||e)); $('#speechStatus').textContent=ui==='sv'?'Google-fel':'Google error'; speechDetail(e.message||'Transcription failed'); }finally{uploadBusy=false}
+    if(!r.ok) throw Error(await r.text()); let j=await r.json();
+    if(current?.id!==meetingId)return;
+    observeLanguage(j.detectedLanguages||[]); speechDetail('Google Chirp 3 · '+languageLabel()+' · '+type.replace('audio/','').toUpperCase());
+    if(j.transcript?.trim()){
+      diag('TEXT ✓ '+j.transcript.length+' chars');
+      const field=$('#transcript'), existing=field.value;
+      field.setRangeText((existing&&!/\s$/.test(existing)?' ':'')+j.transcript.trim(),existing.length,existing.length,'preserve');
+      finalText=field.value; current.transcript=finalText; localStorage.loggDraft=JSON.stringify(current);
+    }
+    if(!paused&&!stopping) $('#speechStatus').textContent=ui==='sv'?'Lyssnar':'Listening';
+  }catch(e){ console.error(e); diag('ERROR '+(e.message||e)); if(current?.id===meetingId){$('#speechStatus').textContent=ui==='sv'?'Google-fel':'Google error'; speechDetail(e.message||'Transcription failed');} }
 }
 function stopSpeech(discard=true){
   stopping=true; clearTimeout(chunkTimer);
+  if(recorder) recorder.flushOnStop=!discard;
   if(recorder?.state==='recording'){ try{recorder.stop()}catch{} }
   stream?.getTracks().forEach(t=>t.stop()); stream=null; stopMeter();
 }
 $('#transcript').oninput=e=>{finalText=e.target.value+' ';if(current)current.transcript=e.target.value};
-$('#pauseBtn').onclick=()=>{paused=!paused;if(paused){stopSpeech(true);releaseMeetingWakeLock();stopReliabilityWatch();reliabilityText(ui==='sv'?'Pausad':'Paused');$('#pauseBtn').textContent=t('resume');$('#speechStatus').textContent=t('paused')}else{stopping=false;requestMeetingWakeLock();startReliabilityWatch();startSpeech();$('#pauseBtn').textContent=t('pause')}};
+$('#pauseBtn').onclick=()=>{paused=!paused;if(paused){stopSpeech(false);releaseMeetingWakeLock();stopReliabilityWatch();reliabilityText(ui==='sv'?'Pausad':'Paused');$('#pauseBtn').textContent=t('resume');$('#speechStatus').textContent=t('paused')}else{stopping=false;requestMeetingWakeLock();startReliabilityWatch();startSpeech();$('#pauseBtn').textContent=t('pause')}};
 function saveDraft(){
   if(!current)return;
   current.transcript=$('#transcript').value.trim();
@@ -288,17 +289,21 @@ async function finishMeeting(){
   stopping=true; paused=false;
 
   // Flush the final partial MediaRecorder segment before creating Smart Notes.
-  if(recorder?.state==='recording'){
+  if(recorder?.state==='recording'||(recorder?.state==='inactive'&&segmentTransitionAt)){
     finishFlush=true;
     const stopped=new Promise(resolve=>{
       finishWaiter=resolve;
       setTimeout(()=>{if(finishWaiter){finishWaiter=null;resolve();}},12000);
     });
-    try{recorder.requestData()}catch(_){}
-    try{recorder.stop()}catch(_){if(finishWaiter){const done=finishWaiter;finishWaiter=null;done();}}
+    if(recorder.state==='recording'){
+      try{recorder.requestData()}catch(_){}
+      try{recorder.stop()}catch(_){if(finishWaiter){const done=finishWaiter;finishWaiter=null;done();}}
+    }
     await stopped;
   }
   stream?.getTracks().forEach(t=>t.stop()); stream=null; stopMeter();
+  // All queued segments must finish before the transcript and Smart Notes are saved.
+  await uploadQueue;
 
   current.transcript=$('#transcript').value.trim();
   current.end=Date.now();
@@ -440,7 +445,60 @@ function structure(text,lang){
     notes:raw
   };
 }
-function openLog(id){let l=getLogs().find(x=>x.id===id);if(!l)return;current=l;$('#resultTitle').textContent=l.name;$('#resultMeta').textContent=`${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}`;let s=l.sections||structure(l.transcript,l.output);let defs=[['summary','summary'],['decisions','decisions'],['actions','actions'],['questions','questions'],['notes','notes']];$('#sections').innerHTML='<div class="intelligence-note"><span>LOGG INTELLIGENCE · v3</span><b>'+(ui==='sv'?'Råtranskriptionen bevaras alltid':'Raw transcript always preserved')+'</b></div>'+defs.map(([k,label])=>`<div class="section-card"><h3>${t(label)}</h3><textarea data-key="${k}">${esc(s[k])}</textarea></div>`).join('');$$('#sections textarea').forEach(a=>a.oninput=()=>{current.sections[a.dataset.key]=a.value;let logs=getLogs(),i=logs.findIndex(x=>x.id===current.id);logs[i]=current;saveLogs(logs)});goTo('result')}
+const NOTE_FIELDS=['summary','decisions','actions','questions','notes'];
+let geminiCandidate=null;
+function openLog(id){
+  const l=getLogs().find(x=>x.id===id);if(!l)return;
+  current=l; geminiCandidate=null;
+  $('#resultTitle').textContent=l.name;
+  $('#resultMeta').textContent=`${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}`;
+  $('#rawTranscript summary').textContent=ui==='sv'?'Ursprunglig transkription':'Original transcript';
+  $('#rawTranscriptText').value=l.transcript||'';
+  const s=l.sections||structure(l.transcript,l.output);
+  $('#sections').innerHTML='<div class="intelligence-note"><span>'+(l.notesSource==='gemini'?'GEMINI FLASH':'LOGG INTELLIGENCE · v3')+'</span><b>'+(ui==='sv'?'Råtranskriptionen bevaras alltid':'Raw transcript always preserved')+'</b></div>'+NOTE_FIELDS.map(k=>`<div class="section-card"><h3>${t(k)}</h3><textarea data-key="${k}">${esc(s[k])}</textarea></div>`).join('');
+  $$('#sections textarea').forEach(a=>a.oninput=()=>{current.sections[a.dataset.key]=a.value;let logs=getLogs(),i=logs.findIndex(x=>x.id===current.id);logs[i]=current;saveLogs(logs)});
+  $('#geminiPreview').hidden=true; $('#geminiStatus').textContent='';
+  $('#geminiBtn').hidden=true;
+  $('#geminiBtn').textContent=ui==='sv'?'Skapa anteckningar med Gemini':'Create notes with Gemini';
+  $('#applyGeminiBtn').textContent=ui==='sv'?'Använd dessa anteckningar':'Use these notes';
+  $('#cancelGeminiBtn').textContent=ui==='sv'?'Behåll nuvarande anteckningar':'Keep existing notes';
+  goTo('result');
+  const base=(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,'');
+  if(base&&l.transcript?.trim()) checkBackend(base).then(h=>{
+    if(current?.id===id&&h.notesAvailable){
+      $('#geminiBtn').hidden=false;
+      $('#geminiStatus').textContent=ui==='sv'?'När du väljer Gemini skickas transkriptionen till Google för mötesanteckningar i EU. Granska resultatet före användning.':'Choosing Gemini sends the transcript to Google for meeting notes in the EU. Review the result before using it.';
+    }
+  }).catch(()=>{});
+}
+$('#geminiBtn').onclick=async()=>{
+  if(!current?.transcript?.trim())return;
+  const meetingId=current.id,button=$('#geminiBtn'),status=$('#geminiStatus');
+  button.disabled=true;status.textContent=ui==='sv'?'Gemini skapar anteckningar…':'Gemini is preparing notes…';
+  try{
+    const base=(window.LOGG_CONFIG?.API_BASE||'').replace(/\/$/,'');
+    const headers={...(await authHeaders()),'Content-Type':'application/json'};
+    const response=await fetch(base+'/api/notes',{method:'POST',headers,body:JSON.stringify({transcript:current.transcript,output:current.output})});
+    if(!response.ok)throw Error('Notes service unavailable');
+    const data=await response.json();
+    if(current?.id!==meetingId)return;
+    if(NOTE_FIELDS.some(k=>typeof data.sections?.[k]!=='string'))throw Error('Invalid notes');
+    geminiCandidate={id:meetingId,sections:data.sections};
+    $('#geminiPreviewSections').innerHTML=NOTE_FIELDS.map(k=>`<div class="section-card"><h3>${t(k)}</h3><textarea readonly>${esc(data.sections[k])}</textarea></div>`).join('');
+    $('#geminiPreview').hidden=false;
+    status.textContent=ui==='sv'?'Granska förslaget och välj om du vill använda det.':'Review the draft and choose whether to use it.';
+  }catch(e){
+    status.textContent=ui==='sv'?'Kunde inte skapa anteckningar. De nuvarande anteckningarna finns kvar.':'Could not create notes. Your existing notes are unchanged.';
+    diag('NOTES ERROR '+(e.message||e));
+  }finally{button.disabled=false}
+};
+$('#applyGeminiBtn').onclick=()=>{
+  if(!geminiCandidate||current?.id!==geminiCandidate.id)return;
+  current.sections=geminiCandidate.sections;current.notesSource='gemini';
+  const logs=getLogs(),i=logs.findIndex(x=>x.id===current.id);
+  if(i<0)return;logs[i]=current;saveLogs(logs);openLog(current.id);
+};
+$('#cancelGeminiBtn').onclick=()=>{geminiCandidate=null;$('#geminiPreview').hidden=true};
 function plain(){let s=current.sections;return `${current.name}\n${fmt(current.start)} · ${duration(current.end-current.start)}\n\n${t('summary')}\n${s.summary}\n\n${t('decisions')}\n${s.decisions}\n\n${t('actions')}\n${s.actions}\n\n${t('questions')}\n${s.questions}\n\n${t('notes')}\n${s.notes}`}
 $('#copyBtn').onclick=async()=>{await navigator.clipboard.writeText(plain());toast(t('copied'))};
 // Minimal store-only ZIP writer for a dependency-free .docx (OOXML package).
