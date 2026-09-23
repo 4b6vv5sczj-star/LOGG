@@ -53,7 +53,7 @@ current={id:Date.now().toString(),name,start:Date.now(),end:null,output:$('#outp
 function startTimer(){clearInterval(tick);let f=()=>$('#timer').textContent=duration(Date.now()-current.start);f();tick=setInterval(f,1000)}
 function speechDetail(msg=''){const el=$('#speechDetail');if(el)el.textContent=msg}
 let recorder=null, stream=null, chunks=[], uploadBusy=false, chunkTimer=null, audioCtx=null, analyser=null, meterRAF=null, stopping=false, chunkBytes=0, chunkCount=0, finishFlush=false, finishWaiter=null;
-let wakeLock=null, reliabilityTimer=null, lastAudioAt=0, reliabilityWarned=false;
+let wakeLock=null, reliabilityTimer=null, lastAudioAt=0, reliabilityWarned=false, captureStarted=false, segmentTransitionAt=0;
 function reliabilityText(msg,warning=false){const el=$('#reliabilityStatus');if(!el)return;el.textContent=msg;el.classList.toggle('warning',!!warning)}
 async function requestMeetingWakeLock(){
   if(!current||current.end||paused)return;
@@ -67,11 +67,17 @@ async function requestMeetingWakeLock(){
   }catch(e){reliabilityText(ui==='sv'?'⚠ Kunde inte hålla skärmen vaken':'⚠ Could not keep screen awake',true);diag('WAKE LOCK ERROR '+(e.message||e));}
 }
 async function releaseMeetingWakeLock(){try{if(wakeLock&&!wakeLock.released)await wakeLock.release()}catch(_){}wakeLock=null}
-function startReliabilityWatch(){clearInterval(reliabilityTimer);lastAudioAt=Date.now();reliabilityWarned=false;reliabilityTimer=setInterval(()=>{
-  if(!current||current.end||paused||stopping)return;
+function startReliabilityWatch(){clearInterval(reliabilityTimer);lastAudioAt=0;reliabilityWarned=false;captureStarted=false;segmentTransitionAt=0;reliabilityTimer=setInterval(()=>{
+  if(!current||current.end||paused||stopping||!captureStarted)return;
   const track=stream?.getAudioTracks?.()[0];
-  const healthy=recorder&&recorder.state==='recording'&&track&&track.readyState==='live';
-  if(!healthy||Date.now()-lastAudioAt>15000){
+  const now=Date.now();
+  const trackLive=track?.readyState==='live';
+  const recording=recorder?.state==='recording';
+  // Each 8-second segment deliberately stops while its audio is sent to Speech.
+  // Give that handoff time to finish, but keep a bound on a stalled upload/restart.
+  const plannedHandoff=segmentTransitionAt && now-segmentTransitionAt<30000;
+  const unhealthy=!trackLive || (!recording&&!plannedHandoff) || (recording&&now-lastAudioAt>15000);
+  if(unhealthy){
     if(!reliabilityWarned){reliabilityWarned=true;reliabilityText(ui==='sv'?'⚠ Inspelningen verkar ha avbrutits — öppna LOGG':'⚠ Recording may have stopped — open LOGG',true);diag('WATCHDOG WARNING');}
   }else if(reliabilityWarned){reliabilityWarned=false;reliabilityText(ui==='sv'?'● Lyssnar · Skärmen hålls vaken':'● Listening · Screen awake');}
 },5000)}
@@ -139,7 +145,7 @@ function beginRecorder(type){
   try{
     recorder=new MediaRecorder(stream,{mimeType:type}); chunks=[]; chunkBytes=0; chunkCount=0;
     recorder.onerror=e=>diag('RECORDER ERROR '+(e.error?.message||e.error?.name||'unknown'));
-    recorder.onstart=()=>diag('RECORDING ✓');
+    recorder.onstart=()=>{captureStarted=true;segmentTransitionAt=0;lastAudioAt=Date.now();diag('RECORDING ✓')};
     recorder.ondataavailable=e=>{if(e.data&&e.data.size){lastAudioAt=Date.now();chunks.push(e.data);chunkBytes+=e.data.size;chunkCount++;diag('AUDIO '+chunkCount+' chunks · '+Math.round(chunkBytes/1024)+' KB')}};
     recorder.onstop=async()=>{
       clearTimeout(chunkTimer);
@@ -162,6 +168,7 @@ function beginRecorder(type){
     chunkTimer=setTimeout(()=>{
       diag('8s · STOP REQUEST');
       if(recorder?.state==='recording'){
+        segmentTransitionAt=Date.now();
         try{recorder.requestData()}catch(_){}
         setTimeout(()=>{if(recorder?.state==='recording')recorder.stop()},150);
       }
