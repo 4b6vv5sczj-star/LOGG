@@ -38,7 +38,7 @@ async function initLoggAuth(){try{
 }catch(e){console.error('LOGG auth init',e);setAuthStatus('Auth init · '+authErrorText(e),true);}}
 
 const SPEECH_LANGS=new Set(['sv-SE','en-GB','fi-FI','es-ES']);
-let speechLang={mode:'auto',locked:null,candidate:null,score:0};
+let speechLang={mode:'auto',locked:null,candidate:null,score:0,history:[],chunks:0};
 function t(k){return I[ui][k]||k} function toast(x){$('#toast').textContent=x;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),1800)}
 function applyLang(){document.documentElement.lang=ui;$$('[data-i18n]').forEach(e=>e.textContent=t(e.dataset.i18n));$$('[data-i18n-placeholder]').forEach(e=>e.placeholder=t(e.dataset.i18nPlaceholder));$('#uiLang').textContent=ui==='en'?'SV':'EN';renderRecent()}
 $('#uiLang').onclick=()=>{ui=ui==='en'?'sv':'en';localStorage.loggUi=ui;applyLang()};
@@ -48,7 +48,7 @@ function getLogs(){try{return JSON.parse(localStorage.loggLogs||'[]')}catch{retu
 function renderRecent(){let x=getLogs(),el=$('#recentList');el.innerHTML=x.length?x.slice().reverse().slice(0,8).map(l=>`<div class="recent-item" data-id="${l.id}"><div><div class="recent-title">${esc(l.name)}</div><div class="recent-meta">${fmt(l.start)} · ${duration((l.end||l.start)-l.start)}</div></div><div>›</div></div>`).join(''):`<div class="empty">${t('empty')}</div>`;$$('.recent-item').forEach(e=>e.onclick=()=>openLog(e.dataset.id))}
 function esc(s=''){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 $('#clearAll').onclick=()=>{if(confirm(ui==='sv'?'Rensa alla lokalt sparade LOGGar?':'Clear all locally saved LOGGs?')){saveLogs([]);renderRecent()}};
-$('#startBtn').onclick=async()=>{if(!(await requireLoggUser()))return;let name=$('#meetingName').value.trim();if(!name||!$('#consent').checked){toast(t('nameRequired'));return}speechLang={mode:$('#speechMode')?.value||'auto',locked:null,candidate:null,score:0}; localStorage.loggSpeechMode=speechLang.mode;
+$('#startBtn').onclick=async()=>{if(!(await requireLoggUser()))return;let name=$('#meetingName').value.trim();if(!name||!$('#consent').checked){toast(t('nameRequired'));return}speechLang={mode:$('#speechMode')?.value||'auto',locked:null,candidate:null,score:0,history:[],chunks:0}; localStorage.loggSpeechMode=speechLang.mode;
 current={id:Date.now().toString(),name,start:Date.now(),end:null,output:$('#outputLang').value,speechMode:speechLang.mode,transcript:'',sections:null};finalText='';$('#transcript').value='';$('#liveTitle').textContent=name;$('#liveDate').textContent=fmt(current.start);goTo('live');startTimer();requestMeetingWakeLock();startReliabilityWatch();startSpeech()};
 function startTimer(){clearInterval(tick);let f=()=>$('#timer').textContent=duration(Date.now()-current.start);f();tick=setInterval(f,1000)}
 function speechDetail(msg=''){const el=$('#speechDetail');if(el)el.textContent=msg}
@@ -177,14 +177,27 @@ function normalizeDetectedLanguage(code=''){
   return null; // German and unrelated detections never become a LOGG lock.
 }
 function observeLanguage(codes=[]){
-  if(speechLang.mode!=='auto' || speechLang.locked) return;
+  if(speechLang.mode!=='auto') return;
   const lang=normalizeDetectedLanguage(codes[0]);
-  if(!lang) return;
-  if(speechLang.candidate===lang) speechLang.score += (lang==='sv-SE'?2:1);
-  else { speechLang.candidate=lang; speechLang.score=(lang==='sv-SE'?2:1); }
-  // Swedish locks quickly; other supported languages need repeated evidence.
-  const threshold=lang==='sv-SE'?3:3;
-  if(speechLang.score>=threshold){ speechLang.locked=lang; diag('LANG LOCK '+lang); }
+  if(!lang) return; // German/other one-off guesses can never take over LOGG.
+  speechLang.chunks=(speechLang.chunks||0)+1;
+  speechLang.history=[...(speechLang.history||[]),lang].slice(-6);
+  if(speechLang.locked) return; // A meeting lock is intentionally sticky for stability.
+
+  // Hysteresis: Swedish gets a small prior because LOGG is currently used mainly in
+  // Finland-Swedish meetings. FI/EN/ES need repeated, consistent evidence.
+  const recent=speechLang.history;
+  const counts=recent.reduce((m,x)=>(m[x]=(m[x]||0)+1,m),{});
+  const required=lang==='sv-SE'?2:3;
+  if((counts[lang]||0)>=required && recent.slice(-required).every(x=>x===lang)){
+    speechLang.locked=lang;
+    speechLang.candidate=lang;
+    speechLang.score=counts[lang];
+    diag('LANG LOCK '+lang+' after '+speechLang.chunks+' chunks');
+    return;
+  }
+  speechLang.candidate=lang;
+  speechLang.score=counts[lang]||1;
 }
 function activeSpeechHint(){
   if(speechLang.mode!=='auto' && SPEECH_LANGS.has(speechLang.mode)) return speechLang.mode;

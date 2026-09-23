@@ -17,6 +17,8 @@ const RATE_WINDOW_MS = Number(process.env.RATE_WINDOW_MS || 60_000);
 const RATE_MAX = Number(process.env.RATE_MAX || 30);
 const DEFAULT_ORIGINS = [
   'https://4b6vv5sczj-star.github.io',
+  'https://nimble-skein-lfs6l.web.app',
+  'https://nimble-skein-lfs6l.firebaseapp.com',
   'http://localhost:8080',
   'http://localhost:5500',
   'http://127.0.0.1:5500'
@@ -86,9 +88,9 @@ const region = process.env.GOOGLE_SPEECH_REGION || 'eu';
 const project = process.env.GOOGLE_CLOUD_PROJECT;
 const client = new speechV2.SpeechClient({apiEndpoint:`${region}-speech.googleapis.com`});
 
-app.get('/',(_,res)=>res.json({ok:true,service:'LOGG Speech',version:'0.11.0'}));
+app.get('/',(_,res)=>res.json({ok:true,service:'LOGG Speech',version:'0.12.0'}));
 app.get('/health',(_,res)=>res.json({
-  ok:true, service:'LOGG Speech', model:'chirp_3', region, version:'0.11.0',
+  ok:true, service:'LOGG Speech', model:'chirp_3', region, version:'0.12.0',
   projectConfigured:Boolean(project), security:'identity-platform', authRequired:true, allowlistEnabled:allowedEmails.size>0
 }));
 
@@ -103,19 +105,48 @@ app.post('/api/transcribe', rateLimit, requireIdentity, upload.single('audio'), 
     const requestedHint=String(req.body?.languageHint||'');
     const languageCodes=allowedHints.has(requestedHint)?[requestedHint]:['auto'];
 
-    // Deliberately do not log transcript, audio, language content, filenames or request bodies.
+    // LOGG Speech Intelligence v1: use Chirp 3 model adaptation for yacht/project terminology.
+    // Client phrases are treated as hints only, sanitized, deduplicated and capped server-side.
+    let clientPhrases=[];
+    try{
+      const parsed=JSON.parse(String(req.body?.phrases||'[]'));
+      if(Array.isArray(parsed)) clientPhrases=parsed;
+    }catch(_){ /* malformed hints are ignored, never fatal */ }
+    const serverPhrases=[
+      'Baltic Yachts','superyacht','sailing yacht','naval architecture','classification society','DNV','Cayman Islands',
+      'carbon composite','carbon fibre','carbon fiber','prepreg','laminate','bulkhead','scantling','load case','keel','rudder',
+      'daggerboard','mast','boom','rigging','standing rigging','running rigging','Harken','Lewmar','Rondal','Hall Spars','North Sails',
+      'HVAC','fancoil','bilge','bilge pump','sea trial','harbour trial','harbor trial','commissioning','inclining test','load test',
+      'engine room','machinery','propulsion','steering','PLC','BMS','P&ID','owner representative','shipyard','subcontractor','handover'
+    ];
+    const cleanPhrase=v=>String(v||'').replace(/[\r\n\t]/g,' ').replace(/\s+/g,' ').trim().slice(0,100);
+    const phraseValues=[...new Set([...serverPhrases,...clientPhrases].map(cleanPhrase).filter(v=>v.length>=2))].slice(0,250);
+    const adaptation=phraseValues.length?{
+      phraseSets:[{inlinePhraseSet:{
+        phrases:phraseValues.map(value=>({value,boost:8})),
+        displayName:'LOGG marine project vocabulary'
+      }}]
+    }:undefined;
+
+    // Deliberately do not log transcript, audio, language content, filenames, hints or request bodies.
     const [response] = await client.recognize({
       recognizer,
-      config:{autoDecodingConfig:{},languageCodes,model:'chirp_3',features:{enableAutomaticPunctuation:true}},
+      config:{
+        autoDecodingConfig:{},
+        languageCodes,
+        model:'chirp_3',
+        features:{enableAutomaticPunctuation:true},
+        ...(adaptation?{adaptation}:{})
+      },
       content:req.file.buffer
     });
     const transcript=(response.results||[]).map(r=>r.alternatives?.[0]?.transcript||'').join(' ').trim();
     const detectedLanguages=[...new Set((response.results||[]).map(r=>r.languageCode).filter(Boolean))];
-    res.json({transcript, detectedLanguages, version:'0.11.0'});
+    res.json({transcript, detectedLanguages, version:'0.12.0'});
   } catch(e) {
     // Keep server-side diagnostics content-free and return a generic client error.
     console.error('STT request failed', {code:String(e?.code ?? 'unknown')});
-    res.status(500).json({error:'Transcription failed', code:String(e?.code ?? 'unknown'), version:'0.11.0'});
+    res.status(500).json({error:'Transcription failed', code:String(e?.code ?? 'unknown'), version:'0.12.0'});
   }
 });
 
@@ -127,4 +158,4 @@ app.use((err,req,res,next)=>{
 });
 
 const port=process.env.PORT||8080;
-app.listen(port,()=>console.log(`LOGG backend v0.11.0 ready; region=${region}; allowedOrigins=${allowedOrigins.size}`));
+app.listen(port,()=>console.log(`LOGG backend v0.12.0 ready; region=${region}; allowedOrigins=${allowedOrigins.size}`));
